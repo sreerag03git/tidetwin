@@ -16,7 +16,7 @@ number that looks like a result.
 |---|---|---|---|
 | **C1** Under intact conditions the tidal strain ratio at a bracketing sensor pair on the targe... | 1.800 | 2.1974 (reciprocal 0.4551) | **FAIL** |
 | **C2** A crack at the joint changes the strain ratio from 1.800 to 2.000, an 11.1 percent dama... | 11.1 percent (1.800 -> 2.000) | 0.0073 % at a/T=0.5, 2c=100 mm | **UNTESTABLE - DATA MISSING** |
-| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 12.67 % of the intact ratio | **FAIL** |
+| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 13.74 % of the intact ratio | **FAIL** |
 | **C4** Detection is achieved in 4 to 9 days at a signal-to-noise ratio of 3. | 4-9 days | never detected in 93 % of trials | **FAIL** |
 | **C5** During neap tides a differential thermal channel of 5 to 15 microstrain provides a usab... | 5-15 microstrain | aliasing resolved; amplitude n/a | **UNTESTABLE - DATA MISSING** |
 | **C6** The log-transformed EnKF converges on remaining life to within +/-0.9 years, outperform... | +/-0.9 years | coverage 100 % | **MARGINAL** |
@@ -24,18 +24,38 @@ number that looks like a result.
 | **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 1.64 MUSD (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
 | **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
 
-<sub>TideTwin 0.1.0 - commit `ada1661` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants ASSUMED placeholder - generated 2026-07-28T17:32:32Z</sub>
+<sub>TideTwin 0.1.0 - commit `273d1ce` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants ASSUMED placeholder - generated 2026-07-28T18:20:49Z</sub>
 <!-- CLAIMS-LEDGER:END -->
 
-**The headline finding is C3.** Under the nuisance channels the brief specifies
-— rotary tidal current direction, spring/neap range, wind-driven residual
-current, water level, twenty years of marine growth, wave-induced offset,
-scour-driven foundation softening and differential FBG drift — the standard
-deviation of the intact strain ratio is of the same order as the damage
-signature the method is supposed to detect. That verdict holds whether it is
-measured against the damage signature this application computes or against the
-11.1 % the abstract asserts, and the second comparison does not depend on any
-modelling choice made here.
+**The headline finding is C3.** Under the eight nuisance channels the brief
+specifies — rotary tidal current direction, spring/neap range, wind-driven
+residual current, water level, twenty years of marine growth, wave-induced
+offset, scour-driven foundation softening and differential FBG drift — the
+standard deviation of the intact strain ratio comes out at **13.7 % of the
+ratio**, against a claimed damage signature of 11.1 %. That is 1.24× the signal,
+against a one-third limit.
+
+Four things make that a decision rather than a number:
+
+- **It is converged.** σ moves by 4.1 % across the second half of the run, inside
+  the 5 % tolerance. An unconverged Monte Carlo has decided nothing, and the app
+  withholds the verdict when it detects one.
+- **It does not depend on our crack model.** The verdict is computed against the
+  paper's *own* claimed 11.1 % signature as well as against the one this app
+  computes, and fails both. The first comparison involves no modelling choice
+  made here.
+- **It is not an artefact of the assumed range widths.** Every nuisance range
+  would have to shrink to **0.31× its assumed width, simultaneously on all eight
+  channels**, for C3 to pass — a sea roughly three times quieter than assumed, on
+  every axis at once.
+- **The channels partially cancel, and it still fails.** The joint variance comes
+  out 73 % *below* the sum of the individual ones: the ratio normalisation
+  genuinely does reject a large part of what each channel does alone. That is a
+  point in the method's favour, and the margin is still not there.
+
+The storm-driven channels — wind current, wave offset and surge — are drawn
+correlated rather than independently, since they share a cause. Drawing them
+independently would have understated the joint σ and flattered the method.
 
 ## What is real, and what is not
 

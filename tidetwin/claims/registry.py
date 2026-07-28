@@ -228,6 +228,13 @@ def _c3(art: Artifacts) -> ClaimResult:
     n = art.c3
     status_txt, msg = verdict_against_claimed_signature(n, 0.111)
     status = Status(status_txt) if status_txt in Status._value2member_map_ else Status.FAIL
+    if status is Status.FAIL and not np.isfinite(n.joint_sd):
+        return ClaimResult(
+            "C3", Status.UNTESTABLE_DATA, "sigma not finite",
+            "The nuisance Monte Carlo produced no finite strain ratios, so no sigma exists "
+            "to compare against anything. Check that the tidal forcing is non-zero.",
+            _contamination(art),
+        )
     top = ", ".join(
         f"{CHANNEL_LABELS[c]} ({s / abs(n.baseline_ratio) * 100:.1f} percent)"
         for c, s in n.dominant_channels(3)
@@ -235,9 +242,21 @@ def _c3(art: Artifacts) -> ClaimResult:
     detail = (
         msg
         + f" Dominant channels: {top}. Monte Carlo standard error on sigma is "
-        f"{n.joint_sd_standard_error / abs(n.baseline_ratio) * 100:.2f} percentage points, so the "
-        "verdict is not a sampling artefact."
+        f"{n.joint_sd_standard_error / abs(n.baseline_ratio) * 100:.2f} percentage points."
     )
+    if n.convergence is not None:
+        detail += " " + n.convergence.verdict
+        if not n.convergence.converged:
+            status = Status.UNTESTABLE_DATA
+            detail += (
+                " The verdict is withheld: an unconverged Monte Carlo has not decided "
+                "anything, and reporting it as FAIL would be as unfounded as reporting it "
+                "as PASS."
+            )
+    if n.break_even is not None:
+        detail += " " + n.break_even.statement
+    if n.decomposition is not None:
+        detail += " " + n.decomposition.interpretation
     return ClaimResult(
         "C3",
         status,

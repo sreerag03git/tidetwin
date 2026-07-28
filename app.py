@@ -258,6 +258,16 @@ if "full" not in st.session_state:
     st.session_state.full = None
     st.session_state.full_key = None
 
+# A code reload or a redeploy re-defines the dataclasses, which leaves anything
+# held in session state an instance of the *old* class. Reading a field the new
+# code expects then raises AttributeError and takes the whole page down with it.
+# Discard a stale artifact instead of half-trusting it: recomputing is cheap,
+# and a crash on a tab the user did not ask about is not.
+if st.session_state.full is not None and not isinstance(st.session_state.full, Artifacts):
+    st.session_state.full = None
+    st.session_state.full_key = None
+    st.info("The analysis code changed since the last run. Press Run full analysis again.")
+
 art: Artifacts = (
     st.session_state.full
     if st.session_state.full is not None and st.session_state.full_key == key
@@ -567,6 +577,53 @@ with TABS[4]:
                              "quadrature sum of slowly varying channels"))
         for ch, why in n.gated_channels.items():
             st.caption(f"{CHANNEL_LABELS[ch]}: {why}")
+
+        if getattr(n, "convergence", None) is not None:
+            section("Has the deciding test converged?",
+                    "an unconverged Monte Carlo has not decided anything")
+            fig = go.Figure()
+            fig.add_scatter(x=n.convergence.n_samples,
+                            y=n.convergence.sigma / abs(n.baseline_ratio) * 100,
+                            name="running sigma", mode="lines+markers")
+            fig.add_hline(y=n.joint_cv * 100, line_dash="dot",
+                          annotation_text="final estimate")
+            fig.update_layout(title="Monte Carlo convergence of the joint sigma",
+                              xaxis_title="samples drawn",
+                              yaxis_title="sigma, % of the intact ratio")
+            figure_block(fig, "c3_convergence", n.convergence.verdict, height=320)
+
+        if getattr(n, "break_even", None) is not None:
+            be = n.break_even
+            section("Break-even", "how much quieter would the sea have to be for C3 to pass?")
+            fig = go.Figure()
+            fig.add_scatter(x=be.scales, y=be.sigmas * 100, name="joint sigma",
+                            mode="lines+markers")
+            fig.add_hline(y=be.threshold * 100, line_dash="dash", line_color="#b3261e",
+                          annotation_text="pass threshold")
+            if np.isfinite(be.factor) and be.factor < 1.0:
+                fig.add_vline(x=be.factor, line_dash="dot",
+                              annotation_text=f"break-even {be.factor:.2f}x")
+            fig.update_layout(
+                title="Joint nuisance sigma against a common scaling of every assumed range",
+                xaxis_title="scale applied to every nuisance range, x",
+                yaxis_title="sigma, % of the intact ratio")
+            figure_block(fig, "c3_break_even", be.statement, height=340)
+
+        if getattr(n, "decomposition", None) is not None:
+            d = n.decomposition
+            section("Why the joint sigma is not the sum of the parts", "interaction between channels")
+            cols = st.columns(3)
+            with cols[0]:
+                quantity(derived(np.sqrt(d.sum_individual_variance) / abs(n.baseline_ratio), "-",
+                                 "sum of channels, in quadrature", [],
+                                 "sqrt of the summed per-channel variances"))
+            with cols[1]:
+                quantity(derived(np.sqrt(max(d.joint_variance, 0.0)) / abs(n.baseline_ratio), "-",
+                                 "measured jointly", [], "joint Monte Carlo"))
+            with cols[2]:
+                quantity(derived(d.interaction_fraction, "-", "interaction term", [],
+                                 "(joint - sum) / sum of variances"))
+            st.caption(d.interpretation)
 
         if art.c4 is not None:
             section("C4 - time to detection", "how long before a crack is distinguishable")

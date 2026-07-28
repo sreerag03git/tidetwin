@@ -56,6 +56,11 @@ __all__ = [
     "run_nuisance_budget",
     "verdict",
     "verdict_against_claimed_signature",
+    "VarianceDecomposition",
+    "ConvergenceTrace",
+    "BreakEven",
+    "convergence_trace",
+    "variance_decomposition",
 ]
 
 #: Channel identifiers, in the order the brief lists them.
@@ -123,6 +128,36 @@ class NuisanceRanges:
     fbg_drift_sd_ustrain: float = 0.5
     # Random measurement noise on each gauge, microstrain rms.
     fbg_noise_ustrain: float = 0.2
+    #: Correlation between the three storm-driven channels - wind-driven current,
+    #: wave-induced offset and water-level surge. They share a cause, so drawing
+    #: them independently understates the joint variance. 0.6 is a moderate
+    #: positive coupling; it is ASSUMED like everything else here, and the
+    #: break-even analysis reports how much the verdict depends on it.
+    storm_correlation: float = 0.6
+
+    def scaled(self, k: float) -> "NuisanceRanges":
+        """All ranges narrowed (k < 1) or widened (k > 1) by the same factor.
+
+        Used by the break-even analysis. Scaling every channel together is the
+        most generous possible reading of "our assumed ranges are too wide":
+        it asks how much better the *whole* environment would have to be, not
+        just the one channel that happens to dominate.
+        """
+        k = max(float(k), 0.0)
+        lo_scour = 1.0 - (1.0 - self.scour_factor_range[0]) * k
+        return NuisanceRanges(
+            direction_bias_sd_deg=self.direction_bias_sd_deg * k,
+            ellipse_ratio_sd=self.ellipse_ratio_sd * k,
+            spring_neap_sd=self.spring_neap_sd * k,
+            wind_current_sd_ms=self.wind_current_sd_ms * k,
+            water_level_sd_m=self.water_level_sd_m * k,
+            marine_growth_mm=(self.marine_growth_mm[0], self.marine_growth_mm[1] * k),
+            wave_offset_sd_ms=self.wave_offset_sd_ms * k,
+            scour_factor_range=(min(max(lo_scour, 0.0), 1.0), 1.0),
+            fbg_drift_sd_ustrain=self.fbg_drift_sd_ustrain * k,
+            fbg_noise_ustrain=self.fbg_noise_ustrain * k,
+            storm_correlation=self.storm_correlation,
+        )
 
     def as_quantities(self) -> list[Quantity]:
         return [
@@ -137,6 +172,121 @@ class NuisanceRanges:
             assumed(self.fbg_drift_sd_ustrain, "ustrain", "differential FBG drift, 1 sd"),
             assumed(self.fbg_noise_ustrain, "ustrain", "FBG noise, rms"),
         ]
+
+
+@dataclass(frozen=True)
+class VarianceDecomposition:
+    """How the joint variance relates to the sum of the individual ones.
+
+    If the channels acted independently on a linear response, the joint variance
+    would equal the sum of the per-channel variances. It does not, for two
+    reasons that pull in opposite directions: the storm-driven channels are
+    correlated (raising the joint variance), while the drag nonlinearity and the
+    ratio normalisation make some channels partially cancel one another (lowering
+    it). The residual is reported rather than assumed away.
+    """
+
+    sum_individual_variance: float
+    joint_variance: float
+    interaction: float
+
+    @property
+    def interaction_fraction(self) -> float:
+        return (
+            float(self.interaction / self.sum_individual_variance)
+            if self.sum_individual_variance > 0
+            else float("nan")
+        )
+
+    @property
+    def interpretation(self) -> str:
+        f = self.interaction_fraction
+        if not np.isfinite(f):
+            return "No individual-channel variance to compare against."
+        if f < -0.1:
+            return (
+                f"The joint variance is {abs(f) * 100:.0f} percent below the sum of the "
+                "individual ones, so the channels partially cancel: the strain ratio is a "
+                "nonlinear function of the forcing and normalising by the second gauge "
+                "rejects part of what each channel does alone. Adding channels does not "
+                "simply add variance, and quoting a per-channel budget as if it did would "
+                "overstate the total."
+            )
+        if f > 0.1:
+            return (
+                f"The joint variance is {f * 100:.0f} percent above the sum of the individual "
+                "ones. The storm-driven channels share a cause and reinforce each other, so "
+                "a budget built by adding independent channels would understate the total."
+            )
+        return (
+            "The joint variance is within 10 percent of the sum of the individual ones, so "
+            "the channels behave close to independently over these ranges."
+        )
+
+
+@dataclass(frozen=True)
+class ConvergenceTrace:
+    """Running estimate of the joint sigma against sample count."""
+
+    n_samples: np.ndarray
+    sigma: np.ndarray
+    converged: bool
+    relative_drift: float
+
+    @property
+    def verdict(self) -> str:
+        if self.converged:
+            return (
+                f"Converged: sigma moves by {self.relative_drift * 100:.1f} percent over the "
+                "last half of the run, within the 5 percent tolerance."
+            )
+        return (
+            f"NOT converged: sigma is still moving by {self.relative_drift * 100:.1f} percent "
+            "over the last half of the run. Increase the sample count before relying on the "
+            "verdict."
+        )
+
+
+@dataclass(frozen=True)
+class BreakEven:
+    """How much smaller every nuisance would have to be for C3 to pass.
+
+    The nuisance ranges are all ASSUMED, so the obvious objection to a FAIL is
+    "your ranges are too wide". This answers it quantitatively: every range is
+    scaled by a common factor and the joint sigma recomputed, giving the factor
+    at which the verdict would flip. A factor of 0.3 means the whole environment
+    would have to be three times quieter than assumed, on every channel at once.
+    """
+
+    scales: np.ndarray
+    sigmas: np.ndarray
+    threshold: float
+    factor: float
+    signature_fraction: float
+
+    @property
+    def achievable(self) -> bool:
+        return bool(np.isfinite(self.factor) and self.factor >= 1.0)
+
+    @property
+    def statement(self) -> str:
+        if self.achievable:
+            return (
+                f"C3 already passes at the assumed ranges (break-even factor "
+                f"{self.factor:.2f}x)."
+            )
+        if not np.isfinite(self.factor):
+            return (
+                "C3 does not pass at any scaling tried, down to "
+                f"{self.scales.min():.2f}x the assumed ranges. The verdict is not an "
+                "artefact of the assumed range widths."
+            )
+        return (
+            f"For C3 to pass, every nuisance range would have to shrink to "
+            f"{self.factor:.2f}x its assumed width - simultaneously, on all eight channels. "
+            "That is the margin by which the method misses, expressed in a form that does "
+            "not depend on trusting any single assumed range."
+        )
 
 
 @dataclass
@@ -154,6 +304,9 @@ class NuisanceResult:
     ranges: NuisanceRanges
     gated_channels: dict[str, str] = field(default_factory=dict)
     n_structural_solves: int = 0
+    convergence: ConvergenceTrace | None = None
+    decomposition: VarianceDecomposition | None = None
+    break_even: BreakEven | None = None
 
     @property
     def joint_cv(self) -> float:
@@ -313,6 +466,9 @@ def run_nuisance_budget(
     n_theta: int = 24,
     seed: int = 20260728,
     era5_available: bool = False,
+    run_break_even: bool = True,
+    signature_fraction: float = 0.111,
+    threshold_fraction: float = 1.0 / 3.0,
     progress: Callable[[float, str], None] | None = None,
 ) -> NuisanceResult:
     """Propagate every nuisance channel through to the intact M2 strain ratio.
@@ -321,6 +477,21 @@ def run_nuisance_budget(
     deviations of the ratio, not of the strain: the ratio is the quantity the
     method actually keys on, and normalising by the second gauge is exactly the
     step that is supposed to reject common-mode nuisance.
+
+    Three further analyses turn the number into a decision:
+
+    * a **convergence trace**, because an unconverged Monte Carlo has decided
+      nothing and the claim is withheld if it has not settled;
+    * a **variance decomposition**, because the joint sigma is not the sum of the
+      per-channel ones and the difference deserves measuring rather than
+      hand-waving;
+    * a **break-even sweep** (``run_break_even``), which scales every range by a
+      common factor and reports the factor at which the verdict would flip. Since
+      every range is ASSUMED, this is what makes the verdict robust to them.
+
+    ``signature_fraction`` is the damage signature the break-even target is set
+    against, defaulting to the 11.1 percent the abstract asserts. It is an input
+    to a comparison, never a computed result.
     """
     from .fe.ljf import LJFModel
 
@@ -351,29 +522,39 @@ def run_nuisance_budget(
     )
     baseline = ratio_from_series(t, base_u, base_l)
 
-    def draw(active: set[str]) -> dict[str, float]:
-        d = _zero_draw()
-        if "current_direction" in active:
-            d["direction_bias"] = np.radians(rng.normal(0.0, ranges.direction_bias_sd_deg))
-            d["ellipse_ratio"] = rng.normal(0.0, ranges.ellipse_ratio_sd)
-        if "spring_neap" in active:
-            d["current_scale"] = max(0.05, 1.0 + rng.normal(0.0, ranges.spring_neap_sd))
-        if "wind_current" in active:
-            d["wind_u"] = rng.normal(0.0, ranges.wind_current_sd_ms)
-            d["wind_v"] = rng.normal(0.0, ranges.wind_current_sd_ms)
-        if "water_level" in active:
-            d["water_level"] = rng.normal(0.0, ranges.water_level_sd_m)
-        if "marine_growth" in active:
-            d["growth"] = rng.uniform(*ranges.marine_growth_mm)
-        if "wave_offset" in active:
-            d["wave_u"] = rng.normal(0.0, ranges.wave_offset_sd_ms)
-            d["wave_v"] = rng.normal(0.0, ranges.wave_offset_sd_ms)
-        if "scour" in active:
-            d["scour"] = rng.uniform(*ranges.scour_factor_range)
-        if "fbg_drift" in active:
-            d["drift"] = rng.normal(0.0, ranges.fbg_drift_sd_ustrain) * 1e-6
-        d["noise"] = ranges.fbg_noise_ustrain * 1e-6
-        return d
+    def make_draw(rg: np.random.Generator, rn: NuisanceRanges):
+        def draw(active: set[str]) -> dict[str, float]:
+            d = _zero_draw()
+            # Wind-driven current, wave offset and surge share a cause (a storm),
+            # so they are drawn from a correlated Gaussian rather than
+            # independently. Independent draws would understate the joint sigma,
+            # which would flatter the method under test.
+            z = _correlated_storm(rg, rn.storm_correlation)
+            if "current_direction" in active:
+                d["direction_bias"] = np.radians(rg.normal(0.0, rn.direction_bias_sd_deg))
+                d["ellipse_ratio"] = rg.normal(0.0, rn.ellipse_ratio_sd)
+            if "spring_neap" in active:
+                d["current_scale"] = max(0.05, 1.0 + rg.normal(0.0, rn.spring_neap_sd))
+            if "wind_current" in active:
+                d["wind_u"] = z[0] * rn.wind_current_sd_ms
+                d["wind_v"] = rg.normal(0.0, rn.wind_current_sd_ms)
+            if "water_level" in active:
+                d["water_level"] = z[1] * rn.water_level_sd_m
+            if "marine_growth" in active:
+                d["growth"] = rg.uniform(*rn.marine_growth_mm)
+            if "wave_offset" in active:
+                d["wave_u"] = z[2] * rn.wave_offset_sd_ms
+                d["wave_v"] = rg.normal(0.0, rn.wave_offset_sd_ms)
+            if "scour" in active:
+                d["scour"] = rg.uniform(*rn.scour_factor_range)
+            if "fbg_drift" in active:
+                d["drift"] = rg.normal(0.0, rn.fbg_drift_sd_ustrain) * 1e-6
+            d["noise"] = rn.fbg_noise_ustrain * 1e-6
+            return d
+
+        return draw
+
+    draw = make_draw(rng, ranges)
 
     per_channel_sd: dict[str, float] = {}
     per_channel_samples: dict[str, np.ndarray] = {}
@@ -391,12 +572,56 @@ def run_nuisance_budget(
         per_channel_sd[ch] = float(np.nanstd(vals, ddof=1))
 
     if progress:
-        progress(0.9, "joint propagation")
-    joint = np.empty(n_samples)
-    for i in range(n_samples):
-        d = draw(set(CHANNELS))
-        eu, el = _sample_series(grid, growth_axis, scour_axis, constituents, t, d, ranges, rng)
-        joint[i] = ratio_from_series(t, eu, el)
+        progress(0.82, "joint propagation")
+
+    def joint_samples_for(rn: NuisanceRanges, n: int, sub_seed: int) -> np.ndarray:
+        """Joint propagation at a given set of ranges, reusing the structural grid."""
+        rg = np.random.default_rng(sub_seed)
+        dr = make_draw(rg, rn)
+        out = np.empty(n)
+        for i in range(n):
+            d = dr(set(CHANNELS))
+            eu, el = _sample_series(grid, growth_axis, scour_axis, constituents, t, d, rn, rg)
+            out[i] = ratio_from_series(t, eu, el)
+        return out
+
+    joint = joint_samples_for(ranges, n_samples, seed + 101)
+    joint_sd = float(np.nanstd(joint, ddof=1))
+
+    conv = convergence_trace(joint)
+    decomp = variance_decomposition(per_channel_sd, joint_sd)
+
+    break_even = None
+    if run_break_even and abs(baseline) > 0 and signature_fraction > 0:
+        if progress:
+            progress(0.9, "break-even: how much quieter would the sea have to be?")
+        target_cv = threshold_fraction * signature_fraction
+        scales = np.array([0.1, 0.25, 0.5, 1.0])
+        n_be = max(40, n_samples // 2)
+        cvs = []
+        for k, s in enumerate(scales):
+            sd_k = float(
+                np.nanstd(joint_samples_for(ranges.scaled(float(s)), n_be, seed + 500 + k), ddof=1)
+            )
+            cvs.append(sd_k / abs(baseline))
+            if progress:
+                progress(0.9 + 0.09 * (k + 1) / len(scales), f"break-even {s:.2f}x")
+        cvs = np.array(cvs)
+        # sigma rises with the scale factor, so interpolate the inverse.
+        if np.all(cvs > target_cv):
+            factor = float("nan")
+        elif np.all(cvs <= target_cv):
+            factor = float(scales[-1])
+        else:
+            order = np.argsort(cvs)
+            factor = float(np.interp(target_cv, cvs[order], scales[order]))
+        break_even = BreakEven(
+            scales=scales,
+            sigmas=cvs,
+            threshold=target_cv,
+            factor=factor,
+            signature_fraction=signature_fraction,
+        )
 
     if progress:
         progress(1.0, "done")
@@ -404,7 +629,7 @@ def run_nuisance_budget(
         baseline_ratio=float(baseline),
         per_channel_sd=per_channel_sd,
         per_channel_samples=per_channel_samples,
-        joint_sd=float(np.nanstd(joint, ddof=1)),
+        joint_sd=joint_sd,
         joint_samples=joint,
         n_samples=n_samples,
         record_days=record_days,
@@ -412,7 +637,54 @@ def run_nuisance_budget(
         ranges=ranges,
         gated_channels=gated,
         n_structural_solves=n_solves,
+        convergence=conv,
+        decomposition=decomp,
+        break_even=break_even,
     )
+
+
+def _correlated_storm(rng: np.random.Generator, rho: float) -> np.ndarray:
+    """Three unit-variance normals with common correlation ``rho``.
+
+    Built as ``z_i = sqrt(rho) * c + sqrt(1-rho) * e_i`` with a shared factor
+    ``c``, which gives exactly equicorrelation ``rho`` and unit variance for
+    ``0 <= rho <= 1`` without needing a Cholesky factorisation.
+    """
+    r = float(np.clip(rho, 0.0, 1.0))
+    common = rng.normal()
+    idio = rng.normal(size=3)
+    return np.sqrt(r) * common + np.sqrt(1.0 - r) * idio
+
+
+def convergence_trace(
+    samples: np.ndarray, n_points: int = 24, tolerance: float = 0.05
+) -> ConvergenceTrace:
+    """Running standard deviation against sample count.
+
+    A deciding test that has not converged is not a decision. This uses the
+    joint samples already drawn, so it costs nothing extra, and flags the run as
+    unconverged if the estimate is still drifting by more than ``tolerance``
+    across the second half of the run.
+    """
+    x = np.asarray(samples, float).ravel()
+    x = x[np.isfinite(x)]
+    if x.size < 8:
+        return ConvergenceTrace(np.array([x.size]), np.array([np.nan]), False, float("nan"))
+    ns = np.unique(np.linspace(8, x.size, n_points).astype(int))
+    sd = np.array([np.std(x[:n], ddof=1) for n in ns])
+    half = sd[len(sd) // 2 :]
+    final = sd[-1]
+    drift = float(np.max(np.abs(half - final)) / final) if final > 0 else float("inf")
+    return ConvergenceTrace(ns, sd, bool(drift <= tolerance), drift)
+
+
+def variance_decomposition(
+    per_channel_sd: dict[str, float], joint_sd: float
+) -> VarianceDecomposition:
+    """Joint variance against the sum of the per-channel variances."""
+    total = float(sum(v**2 for v in per_channel_sd.values()))
+    joint = float(joint_sd**2)
+    return VarianceDecomposition(total, joint, joint - total)
 
 
 def _zero_draw() -> dict[str, float]:
