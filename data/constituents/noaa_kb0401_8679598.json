@@ -1,0 +1,67 @@
+{
+  "label": "Kings Bay, GA (Cumberland Sound)",
+  "note": "strong current, 0.4 km pairing",
+  "retrieved": "2026-07-29",
+  "source": "NOAA CO-OPS published harmonic constants, Center for Operational Oceanographic Products and Services metadata API (mdapi). Water levels: harmonic constants from the accepted datum analysis. Currents: tidal current ellipse constants (major/minor amplitude, major-axis azimuth, Greenwich phase)",
+  "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi",
+  "licence": "US Government work, public domain",
+  "current_station": {
+    "id": "kb0401",
+    "name": "Range E, LB 43, Cumberland Sound",
+    "lat": 30.775049209594727,
+    "lng": -81.48902130126953,
+    "bin": 1,
+    "bin_depth_m": 3.41,
+    "units": "meters, centimeters/second"
+  },
+  "water_level_station": {
+    "id": "8679598",
+    "name": "Kings Bay MSF Pier",
+    "lat": 30.7781,
+    "lng": -81.4914,
+    "units": "meters"
+  },
+  "separation_km": 0.41,
+  "constituents": {
+    "M2": {
+      "elev_amp_m": 0.921,
+      "elev_phase_gmt_deg": 38.6,
+      "major_amp_cm_s": 56.38,
+      "minor_amp_cm_s": 4.42,
+      "major_phase_gmt_deg": 330.9,
+      "azimuth_deg_true": 355.0
+    },
+    "S2": {
+      "elev_amp_m": 0.132,
+      "elev_phase_gmt_deg": 68.9,
+      "major_amp_cm_s": 5.5,
+      "minor_amp_cm_s": 0.46,
+      "major_phase_gmt_deg": 10.9,
+      "azimuth_deg_true": 355.0
+    },
+    "N2": {
+      "elev_amp_m": 0.183,
+      "elev_phase_gmt_deg": 25.6,
+      "major_amp_cm_s": 18.47,
+      "minor_amp_cm_s": 2.42,
+      "major_phase_gmt_deg": 318.9,
+      "azimuth_deg_true": 355.0
+    },
+    "K1": {
+      "elev_amp_m": 0.106,
+      "elev_phase_gmt_deg": 212.3,
+      "major_amp_cm_s": 3.7,
+      "minor_amp_cm_s": 0.41,
+      "major_phase_gmt_deg": 136.6,
+      "azimuth_deg_true": 355.0
+    },
+    "O1": {
+      "elev_amp_m": 0.077,
+      "elev_phase_gmt_deg": 216.7,
+      "major_amp_cm_s": 2.78,
+      "minor_amp_cm_s": 0.67,
+      "major_phase_gmt_deg": 146.8,
+      "azimuth_deg_true": 355.0
+    }
+  }
+}

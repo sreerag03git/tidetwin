@@ -149,6 +149,10 @@ Work through this list on the live URL:
 - [ ] Change the seed, rerun, and confirm the stamp changes with it.
 - [ ] Set the LJF model to RIGID and confirm C2 and C7 become
       `UNTESTABLE — DATA MISSING` rather than reporting zero.
+- [ ] **Environment** shows a green MEASURED banner naming a NOAA station, and
+      the constituent table lists current semi-major/semi-minor axes.
+- [ ] Switch the sidebar **Tidal forcing** to the ASSUMED placeholder and confirm
+      the banner and provenance chips change with it.
 
 If the stamp reads `git commit: unavailable`, the container has no git metadata.
 That is cosmetic on Streamlit Cloud; the CSV export still carries the version,
@@ -156,7 +160,26 @@ seed and geometry digest.
 
 ---
 
-## 7. Optional: real tidal forcing
+## 7. Tidal forcing
+
+**Already real, out of the box.** Six NOAA CO-OPS stations are cached in
+`data/constituents/` and committed, so the deployed app has MEASURED tidal
+forcing — water-level amplitudes and tidal current ellipses — with no account,
+no API key and no network call at runtime. The sidebar's **Tidal forcing**
+selector picks between them.
+
+To refresh them, or add stations:
+
+```bash
+PYTHONPATH=. python scripts/fetch_tides.py --force
+```
+
+These are real published constants but they are **not** the Arabian Gulf
+platform site, and every claim that uses them says so. C3 returns the same
+verdict at all six, so the site-specific extraction below changes the numbers
+rather than the conclusion.
+
+### Site-specific extraction (TPXO / FES)
 
 Only worth doing locally — the model files are far too large for the container.
 
@@ -178,8 +201,8 @@ extraction relabelled as MEASURED would be worse than a placeholder that admits
 what it is.
 
 Meanwhile the sidebar accepts harmonic constants directly, typed in or uploaded
-as CSV, for any site you like. Those are ASSUMED too, and the report says so on
-every claim that uses them.
+as CSV, for any site you like. Those are ASSUMED — nothing typed into a sidebar
+can be MEASURED — and the report says so on every claim that uses them.
 
 ---
 

@@ -102,8 +102,15 @@ def _contamination(art: Artifacts) -> tuple[str, ...]:
     if art.tide_provenance != "MEASURED":
         out.append(
             "Tidal harmonic constants are "
-            f"{art.tide_provenance}, not a TPXO/FES extraction: every strain magnitude "
+            f"{art.tide_provenance}, not a real extraction: every strain magnitude "
             "and ratio below describes a hypothetical tide."
+        )
+    else:
+        out.append(
+            "Tidal forcing is MEASURED, but from a published station rather than the "
+            "platform site: " + (art.tide_source_note or "see the Provenance tab") + " "
+            "A site-specific TPXO or FES extraction would change the magnitudes; the C3 "
+            "verdict is unchanged across every station tested."
         )
     if not art.era5_available:
         out.append("ERA5 unavailable: wind, wave and thermal channels use ASSUMED ranges.")

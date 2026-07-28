@@ -90,6 +90,10 @@ class AnalysisConfig:
     tide_table: dict[str, dict[str, float]] | None = None
     tide_source: str = ""
     tide_is_measured: bool = False
+    #: NOAA CO-OPS current-station id whose cached harmonic constants to use.
+    #: When set, tidal forcing is MEASURED and takes precedence over
+    #: ``tide_table``. ``None`` falls back to the user table or the placeholder.
+    tide_station: str | None = None
 
     def hydro(self) -> HydroConfig:
         return HydroConfig(
@@ -101,10 +105,22 @@ class AnalysisConfig:
     def constituents(self):
         """Build the tidal constituents for this configuration.
 
-        Falls back to the labelled placeholder set when no table is supplied.
-        Provenance is ASSUMED unless the caller explicitly asserts a measured
-        source, which the sidebar cannot do by itself.
+        Precedence: a cached NOAA station (MEASURED) beats a user-entered table
+        (ASSUMED) beats the labelled placeholder. Only the NOAA route can produce
+        MEASURED provenance; nothing typed into the sidebar can.
         """
+        if self.tide_station:
+            from .loads.noaa import REFERENCE_STATIONS, load_pair, to_constituents
+
+            for sp in REFERENCE_STATIONS:
+                if sp.current_id == self.tide_station:
+                    return to_constituents(load_pair(sp))
+            raise DataUnavailable(
+                f"NOAA station '{self.tide_station}'",
+                "not one of the shipped reference stations",
+                "Choose a station from tidetwin.loads.noaa.REFERENCE_STATIONS, or run "
+                "scripts/fetch_tides.py to cache it.",
+            )
         if not self.tide_table:
             return placeholder_constituents(self.latitude, self.longitude)
         return from_harmonic_constants(
@@ -189,6 +205,24 @@ def normalise(cfg: AnalysisConfig) -> tuple[AnalysisConfig, tuple[str, ...]]:
         notes.append("Negative marine growth is meaningless; set to 0.")
         changes["marine_growth_mm"] = 0.0
 
+    if cfg.tide_station:
+        from .loads.noaa import REFERENCE_STATIONS, available_cached
+
+        cached = {sp.current_id for sp in available_cached()}
+        known = {sp.current_id for sp in REFERENCE_STATIONS}
+        if cfg.tide_station not in known:
+            notes.append(
+                f"Tide station '{cfg.tide_station}' is not a shipped reference station; "
+                "falling back to the labelled placeholder set."
+            )
+            changes["tide_station"] = None
+        elif cfg.tide_station not in cached:
+            notes.append(
+                f"Tide station '{cfg.tide_station}' has no cached harmonic constants; "
+                "run scripts/fetch_tides.py. Falling back to the placeholder set."
+            )
+            changes["tide_station"] = None
+
     table = cfg.tide_table
     if table:
         known = {}
@@ -210,6 +244,8 @@ def normalise(cfg: AnalysisConfig) -> tuple[AnalysisConfig, tuple[str, ...]]:
         changes["tide_table"] = known or None
 
     effective = table or PLACEHOLDER_CONSTITUENTS
+    if changes.get("tide_station", cfg.tide_station):
+        return (replace(cfg, **changes) if changes else cfg), tuple(notes)
     if not any(
         abs(v.get("semi_major", 0.0)) > 0 or abs(v.get("elev_amp", 0.0)) > 0
         for v in effective.values()

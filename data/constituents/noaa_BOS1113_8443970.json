@@ -1,0 +1,67 @@
+{
+  "label": "Boston, MA (Boston Channel)",
+  "note": "strongly semidiurnal, weak current",
+  "retrieved": "2026-07-29",
+  "source": "NOAA CO-OPS published harmonic constants, Center for Operational Oceanographic Products and Services metadata API (mdapi). Water levels: harmonic constants from the accepted datum analysis. Currents: tidal current ellipse constants (major/minor amplitude, major-axis azimuth, Greenwich phase)",
+  "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi",
+  "licence": "US Government work, public domain",
+  "current_station": {
+    "id": "BOS1113",
+    "name": "Boston Channel Light #5",
+    "lat": 42.33578,
+    "lng": -71.00028,
+    "bin": 3,
+    "bin_depth_m": 10.06,
+    "units": "meters, centimeters/second"
+  },
+  "water_level_station": {
+    "id": "8443970",
+    "name": "Boston",
+    "lat": 42.35389,
+    "lng": -71.05028,
+    "units": "meters"
+  },
+  "separation_km": 4.58,
+  "constituents": {
+    "M2": {
+      "elev_amp_m": 1.371,
+      "elev_phase_gmt_deg": 109.2,
+      "major_amp_cm_s": 10.03,
+      "minor_amp_cm_s": 0.98,
+      "major_phase_gmt_deg": 43.6,
+      "azimuth_deg_true": 297.1
+    },
+    "S2": {
+      "elev_amp_m": 0.208,
+      "elev_phase_gmt_deg": 146.2,
+      "major_amp_cm_s": 2.16,
+      "minor_amp_cm_s": 0.62,
+      "major_phase_gmt_deg": 90.6,
+      "azimuth_deg_true": 297.1
+    },
+    "N2": {
+      "elev_amp_m": 0.305,
+      "elev_phase_gmt_deg": 76.7,
+      "major_amp_cm_s": 2.88,
+      "minor_amp_cm_s": 0.1,
+      "major_phase_gmt_deg": 18.9,
+      "azimuth_deg_true": 297.1
+    },
+    "K1": {
+      "elev_amp_m": 0.143,
+      "elev_phase_gmt_deg": 205.6,
+      "major_amp_cm_s": 0.62,
+      "minor_amp_cm_s": 0.26,
+      "major_phase_gmt_deg": 144.2,
+      "azimuth_deg_true": 297.1
+    },
+    "O1": {
+      "elev_amp_m": 0.116,
+      "elev_phase_gmt_deg": 187.1,
+      "major_amp_cm_s": 0.21,
+      "minor_amp_cm_s": 0.15,
+      "major_phase_gmt_deg": 56.9,
+      "azimuth_deg_true": 297.1
+    }
+  }
+}

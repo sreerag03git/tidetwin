@@ -23,6 +23,7 @@ from tidetwin.claims.ledger import (  # noqa: E402
 )
 from tidetwin.claims.registry import CLAIMS, Status, evaluate_all  # noqa: E402
 from tidetwin.geometry.oc4 import OC4_CITATION, load_tables  # noqa: E402
+from tidetwin.loads.noaa import available_cached  # noqa: E402
 from tidetwin.report import ReportInputs, to_html, to_markdown, to_text  # noqa: E402
 
 MARKER_START = "<!-- CLAIMS-LEDGER:START -->"
@@ -39,9 +40,25 @@ def main() -> int:
     ap.add_argument("--report", type=Path, default=None,
                     help="write the full report; format from the suffix (.html, .md, .txt)")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument(
+        "--station",
+        default="auto",
+        help="NOAA current-station id for MEASURED tidal forcing; 'auto' uses the first "
+        "cached reference station, 'none' uses the ASSUMED placeholder",
+    )
     args = ap.parse_args()
 
-    cfg = AnalysisConfig(seed=args.seed, n_mc_samples=args.samples, n_theta=12, record_days=14.0)
+    station = args.station
+    if station == "auto":
+        cached = available_cached()
+        station = cached[0].current_id if cached else None
+    elif station == "none":
+        station = None
+
+    cfg = AnalysisConfig(
+        seed=args.seed, n_mc_samples=args.samples, n_theta=12, record_days=14.0,
+        tide_station=station,
+    )
 
     def progress(f: float, m: str) -> None:
         if not args.quiet:
@@ -55,7 +72,11 @@ def main() -> int:
         geometry_digest=tables.digest,
         geometry_retrieved=str(OC4_CITATION.retrieved),
         ljf_model=cfg.ljf_model.value,
-        tide_source=f"{art.tide_provenance} placeholder",
+        tide_source=(
+            f"{art.tide_provenance}: {art.tide_source_note}"
+            if art.tide_provenance == "MEASURED"
+            else f"{art.tide_provenance} placeholder"
+        ),
     )
 
     by_id = {r.claim_id: r for r in results}

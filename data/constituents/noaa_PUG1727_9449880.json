@@ -1,0 +1,67 @@
+{
+  "label": "Friday Harbor, WA (Point Colville)",
+  "note": "mixed regime, rotary, Salish Sea",
+  "retrieved": "2026-07-29",
+  "source": "NOAA CO-OPS published harmonic constants, Center for Operational Oceanographic Products and Services metadata API (mdapi). Water levels: harmonic constants from the accepted datum analysis. Currents: tidal current ellipse constants (major/minor amplitude, major-axis azimuth, Greenwich phase)",
+  "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi",
+  "licence": "US Government work, public domain",
+  "current_station": {
+    "id": "PUG1727",
+    "name": "Point Colville, 3.0 nm east of (Lawson Reef, 1 nm NW of)",
+    "lat": 48.41249084472656,
+    "lng": -122.7402572631836,
+    "bin": 10,
+    "bin_depth_m": 50.29,
+    "units": "meters, centimeters/second"
+  },
+  "water_level_station": {
+    "id": "9449880",
+    "name": "Friday Harbor",
+    "lat": 48.545277,
+    "lng": -123.0125,
+    "units": "meters"
+  },
+  "separation_km": 24.91,
+  "constituents": {
+    "M2": {
+      "elev_amp_m": 0.557,
+      "elev_phase_gmt_deg": 10.6,
+      "major_amp_cm_s": 38.07,
+      "minor_amp_cm_s": 6.79,
+      "major_phase_gmt_deg": 315.3,
+      "azimuth_deg_true": 9.1
+    },
+    "S2": {
+      "elev_amp_m": 0.132,
+      "elev_phase_gmt_deg": 35.7,
+      "major_amp_cm_s": 10.19,
+      "minor_amp_cm_s": 0.82,
+      "major_phase_gmt_deg": 333.9,
+      "azimuth_deg_true": 9.1
+    },
+    "N2": {
+      "elev_amp_m": 0.12,
+      "elev_phase_gmt_deg": 343.0,
+      "major_amp_cm_s": 10.39,
+      "minor_amp_cm_s": 2.11,
+      "major_phase_gmt_deg": 286.1,
+      "azimuth_deg_true": 9.1
+    },
+    "K1": {
+      "elev_amp_m": 0.76,
+      "elev_phase_gmt_deg": 280.4,
+      "major_amp_cm_s": 25.67,
+      "minor_amp_cm_s": 4.37,
+      "major_phase_gmt_deg": 211.8,
+      "azimuth_deg_true": 9.1
+    },
+    "O1": {
+      "elev_amp_m": 0.434,
+      "elev_phase_gmt_deg": 258.7,
+      "major_amp_cm_s": 10.65,
+      "minor_amp_cm_s": 9.31,
+      "major_phase_gmt_deg": 188.1,
+      "azimuth_deg_true": 9.1
+    }
+  }
+}

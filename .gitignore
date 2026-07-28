@@ -4,8 +4,14 @@
 # Downloaded datasets. Reproducible from the manifest; too large to version.
 data/era5_cache/*
 !data/era5_cache/.gitkeep
-data/constituents/*
-!data/constituents/.gitkeep
+
+# NOAA CO-OPS harmonic constants ARE committed: a few kB each, US Government
+# public domain, and shipping them is what gives the app MEASURED tidal forcing
+# with no network call and lets CI reproduce the ledger offline.
+# Extractions from the large tide models are not committed.
+data/constituents/tpxo_*
+data/constituents/fes_*
+data/constituents/got_*
 
 # Tide models are multi-gigabyte and non-redistributable.
 data/tide_models/

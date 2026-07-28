@@ -1,0 +1,67 @@
+{
+  "label": "Richmond, CA (San Francisco Bay)",
+  "note": "mixed mainly semidiurnal, strong current",
+  "retrieved": "2026-07-29",
+  "source": "NOAA CO-OPS published harmonic constants, Center for Operational Oceanographic Products and Services metadata API (mdapi). Water levels: harmonic constants from the accepted datum analysis. Currents: tidal current ellipse constants (major/minor amplitude, major-axis azimuth, Greenwich phase)",
+  "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi",
+  "licence": "US Government work, public domain",
+  "current_station": {
+    "id": "SFB1310",
+    "name": "Point Chauncey, 1.25 miles N of.",
+    "lat": 37.9153,
+    "lng": -122.44607,
+    "bin": 1,
+    "bin_depth_m": 9.48,
+    "units": "meters, centimeters/second"
+  },
+  "water_level_station": {
+    "id": "9414863",
+    "name": "Richmond",
+    "lat": 37.9283,
+    "lng": -122.4,
+    "units": "meters"
+  },
+  "separation_km": 4.29,
+  "constituents": {
+    "M2": {
+      "elev_amp_m": 0.604,
+      "elev_phase_gmt_deg": 222.4,
+      "major_amp_cm_s": 52.58,
+      "minor_amp_cm_s": 2.88,
+      "major_phase_gmt_deg": 178.6,
+      "azimuth_deg_true": 348.6
+    },
+    "S2": {
+      "elev_amp_m": 0.138,
+      "elev_phase_gmt_deg": 231.4,
+      "major_amp_cm_s": 11.88,
+      "minor_amp_cm_s": 0.51,
+      "major_phase_gmt_deg": 191.7,
+      "azimuth_deg_true": 348.6
+    },
+    "N2": {
+      "elev_amp_m": 0.125,
+      "elev_phase_gmt_deg": 197.3,
+      "major_amp_cm_s": 12.55,
+      "minor_amp_cm_s": 0.57,
+      "major_phase_gmt_deg": 156.0,
+      "azimuth_deg_true": 348.6
+    },
+    "K1": {
+      "elev_amp_m": 0.366,
+      "elev_phase_gmt_deg": 232.6,
+      "major_amp_cm_s": 23.15,
+      "minor_amp_cm_s": 0.87,
+      "major_phase_gmt_deg": 178.1,
+      "azimuth_deg_true": 348.6
+    },
+    "O1": {
+      "elev_amp_m": 0.222,
+      "elev_phase_gmt_deg": 216.4,
+      "major_amp_cm_s": 15.43,
+      "minor_amp_cm_s": 2.11,
+      "major_phase_gmt_deg": 168.1,
+      "azimuth_deg_true": 348.6
+    }
+  }
+}

@@ -28,9 +28,10 @@ from tidetwin.geometry.oc4 import (
 )
 from tidetwin.loads.era5 import credentials_status
 from tidetwin.loads.morison import API_RP2A, drag_inertia_coefficients
+from tidetwin.loads.noaa import available_cached
 from tidetwin.loads.tides import PLACEHOLDER_CONSTITUENTS, tide_model_status
 from tidetwin.nuisance import CHANNEL_LABELS, NuisanceRanges
-from tidetwin.provenance import assumed, derived, published
+from tidetwin.provenance import assumed, derived, measured, published
 from tidetwin.report import ReportInputs, to_html, to_markdown, to_text
 from tidetwin.ui import (
     dataframe,
@@ -67,6 +68,32 @@ TIDE_COLUMNS = [
 ]
 
 
+def tide_source_input(s) -> str | None:
+    """Choose the tidal forcing: a real station, or a hand-entered table.
+
+    Only the NOAA route yields MEASURED provenance. Anything typed into the
+    sidebar is ASSUMED, however plausible it looks.
+    """
+    cached = available_cached()
+    labels = {sp.current_id: sp.label for sp in cached}
+    options: list[str | None] = [sp.current_id for sp in cached] + [None]
+    if not cached:
+        s.warning("No cached tidal constants. Run `python scripts/fetch_tides.py`.")
+        return None
+    choice = s.selectbox(
+        "Tidal forcing",
+        options,
+        index=0,
+        format_func=lambda k: (labels[k] + "  (MEASURED)") if k else "Placeholder / custom (ASSUMED)",
+        help="NOAA CO-OPS published harmonic constants. These are real stations, but they "
+        "are not the Arabian Gulf platform site: for that a TPXO or FES extraction is "
+        "needed. C3's verdict is the same at every station tested.",
+    )
+    if choice:
+        s.caption(f"MEASURED — {labels[choice]}")
+    return choice
+
+
 def tide_inputs(s) -> tuple[dict | None, str]:
     """Let the user supply harmonic constants for any site, or upload them.
 
@@ -74,7 +101,7 @@ def tide_inputs(s) -> tuple[dict | None, str]:
     Supplying a real TPXO/FES extraction is what changes that, and the
     Provenance tab says so.
     """
-    with s.expander("Tidal harmonic constants (ASSUMED)"):
+    with s.expander("Custom harmonic constants (ASSUMED)"):
         st.caption(
             "Edit for your site, or upload a CSV with columns: constituent, "
             + ", ".join(TIDE_COLUMNS)
@@ -124,6 +151,7 @@ def sidebar() -> AnalysisConfig:
     lat = s.number_input("Latitude, deg N", -90.0, 90.0, 24.9, 0.1, format="%.4f")
     lon = s.number_input("Longitude, deg E", -180.0, 180.0, 53.2, 0.1, format="%.4f")
 
+    tide_station = tide_source_input(s)
     tide_table, tide_source = tide_inputs(s)
 
     s.markdown("**Joint and sensors**")
@@ -220,6 +248,7 @@ def sidebar() -> AnalysisConfig:
         economics=econ,
         tide_table=tide_table,
         tide_source=tide_source,
+        tide_station=tide_station,
     )
 
 
@@ -241,6 +270,7 @@ def _cfg_key(cfg: AnalysisConfig) -> tuple:
         cfg.latitude, cfg.longitude, cfg.joint_id, cfg.sensor_offset_m, cfg.sensor_theta_deg,
         cfg.ljf_model.value, cfg.roughness_m, cfg.marine_growth_mm, cfg.record_days,
         cfg.crack_a_over_T, cfg.crack_2c_m, cfg.n_mc_samples, cfg.n_theta, cfg.seed, tide,
+        cfg.tide_station,
     )
     _CFG_CACHE[k] = cfg
     return k
@@ -450,15 +480,51 @@ with TABS[1]:
 # -------------------------------------------------------------- Environment
 with TABS[2]:
     section("Tidal forcing", "the constituents that drive the current and the water level")
-    tide_ok, tide_why = tide_model_status(cfg.tide_model_dir)
-    if not tide_ok:
-        unavailable_panel("DATA UNAVAILABLE - no tide model", tide_why,
-                          "Constituents below are ASSUMED placeholders and contaminate C1-C4.")
-    df = pd.DataFrame(PLACEHOLDER_CONSTITUENTS).T.reset_index(names="constituent")
-    dataframe(df)
-    for name in ("M2", "S2"):
-        quantity(assumed(PLACEHOLDER_CONSTITUENTS[name]["elev_amp"], "m",
-                         f"{name} elevation amplitude"))
+    if art.tide_provenance == "MEASURED":
+        st.success(f"MEASURED tidal forcing — {art.tide_source_note}")
+        con = cfg.constituents()
+        rows = []
+        for i, nm in enumerate(con.names):
+            rows.append({
+                "constituent": nm,
+                "elevation amp, m": round(float(con.elev_amp[i]), 4),
+                "current semi-major, m/s": round(float(con.semi_major[i]), 4),
+                "current semi-minor, m/s": round(float(con.semi_minor[i]), 4),
+                "major-axis inclination, deg": round(float(np.degrees(con.inclination[i])), 1),
+            })
+        dataframe(pd.DataFrame(rows))
+        i = con.index("M2")
+        cols = st.columns(3)
+        with cols[0]:
+            quantity(measured(float(con.elev_amp[i]), "m", "M2 elevation amplitude",
+                              con.citation))
+        with cols[1]:
+            quantity(measured(float(con.semi_major[i]), "m/s", "M2 current semi-major axis",
+                              con.citation))
+        with cols[2]:
+            ecc = abs(float(con.semi_minor[i]) / float(con.semi_major[i]))
+            quantity(derived(ecc, "-", "M2 ellipse eccentricity", [],
+                             "|semi-minor| / semi-major",
+                             note="0 is a reversing channel current, 1 is circular. This is "
+                                  "the single strongest predictor of the C3 nuisance floor "
+                                  "(r = -0.95 across the stations tested)."))
+        st.caption(
+            "These are real published constants, but not the Arabian Gulf platform site. "
+            "For that, a TPXO or FES extraction is required — see the Provenance tab. "
+            "C3 returns the same verdict at every station tested."
+        )
+    else:
+        tide_ok, tide_why = tide_model_status(cfg.tide_model_dir)
+        if not tide_ok:
+            unavailable_panel(
+                "Tidal constants are ASSUMED", tide_why,
+                "Select a NOAA station in the sidebar for MEASURED forcing, or configure "
+                "a TPXO/FES model for the platform site.")
+        df = pd.DataFrame(PLACEHOLDER_CONSTITUENTS).T.reset_index(names="constituent")
+        dataframe(df)
+        for name in ("M2", "S2"):
+            quantity(assumed(PLACEHOLDER_CONSTITUENTS[name]["elev_amp"], "m",
+                             f"{name} elevation amplitude"))
 
     section("ERA5 metocean", "wind, waves and temperature from the Copernicus reanalysis")
     era5_ok, era5_why = credentials_status()

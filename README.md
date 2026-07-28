@@ -14,17 +14,17 @@ number that looks like a result.
 <!-- CLAIMS-LEDGER:START -->
 | Claim | Asserted | Computed | Status |
 |---|---|---|---|
-| **C1** Under intact conditions the tidal strain ratio at a bracketing sensor pair on the targe... | 1.800 | 2.1974 (reciprocal 0.4551) | **FAIL** |
-| **C2** A crack at the joint changes the strain ratio from 1.800 to 2.000, an 11.1 percent dama... | 11.1 percent (1.800 -> 2.000) | 0.0073 % at a/T=0.5, 2c=100 mm | **UNTESTABLE - DATA MISSING** |
-| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 13.74 % of the intact ratio | **FAIL** |
-| **C4** Detection is achieved in 4 to 9 days at a signal-to-noise ratio of 3. | 4-9 days | never detected in 93 % of trials | **FAIL** |
+| **C1** Under intact conditions the tidal strain ratio at a bracketing sensor pair on the targe... | 1.800 | 1.9059 (reciprocal 0.5247) | **MARGINAL** |
+| **C2** A crack at the joint changes the strain ratio from 1.800 to 2.000, an 11.1 percent dama... | 11.1 percent (1.800 -> 2.000) | 0.0043 % at a/T=0.5, 2c=100 mm | **UNTESTABLE - DATA MISSING** |
+| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 8.19 % of the intact ratio | **FAIL** |
+| **C4** Detection is achieved in 4 to 9 days at a signal-to-noise ratio of 3. | 4-9 days | never detected in 88 % of trials | **FAIL** |
 | **C5** During neap tides a differential thermal channel of 5 to 15 microstrain provides a usab... | 5-15 microstrain | aliasing resolved; amplitude n/a | **UNTESTABLE - DATA MISSING** |
 | **C6** The log-transformed EnKF converges on remaining life to within +/-0.9 years, outperform... | +/-0.9 years | coverage 100 % | **MARGINAL** |
 | **C7** The same damage produces a natural frequency shift below 0.5 percent, so modal methods ... | < 0.5 percent | 0.0008 % | **PASS** |
 | **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 1.64 MUSD (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
 | **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
 
-<sub>TideTwin 0.1.0 - commit `273d1ce` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants ASSUMED placeholder - generated 2026-07-28T18:20:49Z</sub>
+<sub>TideTwin 0.1.0 - commit `a9049a6` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-28T18:47:45Z</sub>
 <!-- CLAIMS-LEDGER:END -->
 
 **The headline finding is C3.** Under the eight nuisance channels the brief
@@ -57,6 +57,44 @@ The storm-driven channels — wind current, wave offset and surge — are drawn
 correlated rather than independently, since they share a cause. Drawing them
 independently would have understated the joint σ and flattered the method.
 
+### C3 does not depend on the tide
+
+The obvious remaining objection was that the FAIL might be an artefact of the
+placeholder tide. It is not. `scripts/settle_c3.py` reruns the whole budget
+against **real published harmonic constants** from six NOAA CO-OPS stations —
+water-level amplitudes *and* tidal current ellipses — spanning semidiurnal to
+mixed-diurnal regimes, rectilinear to strongly rotary currents, and nearly an
+order of magnitude in current amplitude:
+
+| Tide | M2 current | Ellipse ecc. | Form factor | σ, % of ratio | σ / claimed | Verdict |
+|---|---|---|---|---|---|---|
+| Placeholder *(not real)* | 0.250 | 0.320 | 0.571 | 14.2 | 1.28 | FAIL |
+| Mayport, FL | 0.584 | 0.299 | 0.184 | 8.6 | 0.77 | FAIL |
+| Friday Harbor, WA | 0.381 | 0.178 | 1.733 | 21.0 | 1.89 | FAIL |
+| Boston, MA | 0.100 | 0.098 | 0.164 | 28.1 | 2.53 | FAIL |
+| Kings Bay, GA | 0.564 | 0.078 | 0.174 | 28.1 | 2.54 | FAIL |
+| Woods Hole, MA | 0.496 | 0.051 | 0.458 | 36.7 | 3.30 | FAIL |
+| Richmond, CA | 0.526 | 0.055 | 0.792 | 41.1 | 3.70 | FAIL |
+
+Every real regime fails, by between 2.3× and 11× the limit. The placeholder was
+if anything *generous* — it sits in the lower half of the real range rather than
+stacking the deck.
+
+**The mechanism, which is the useful part.** Nuisance σ tracks the *shape* of the
+tidal ellipse almost perfectly (r = **−0.95** against eccentricity) and is
+essentially independent of its *size* (r = −0.07 against current amplitude). A
+rotary current never goes slack, so the strain ratio stays well conditioned; a
+rectilinear current passes through zero twice a cycle and the ratio blows up near
+slack water. The method is not signal-starved — it is ill-conditioned.
+
+That is actionable: if this method is to be deployed anywhere, it wants a site
+with a strongly rotary tidal current. And at the most rotary site tested it still
+misses by a factor of 2.3.
+
+The platform site itself still needs a TPXO or FES extraction — both are
+registered downloads and are not shipped. But the evidence says that extraction
+would change the numbers, not the conclusion.
+
 ## What is real, and what is not
 
 | Layer | Source | Status |
@@ -66,7 +104,8 @@ independently would have understated the joint σ and flattered the method.
 | Hydrodynamics | Morison with API RP 2A-WSD / ISO 19902 coefficients | **computed** |
 | Crack → local flexibility | Newman–Raju SIF with the Castigliano/Irwin compliance integral | **computed**, a documented lower bound |
 | Shell-FE crack→LJF surface | 3D shell FE, generated offline | **not shipped** — needs a shell FE code and digitised validation data |
-| Tidal constants | TPXO9-atlas / FES2014 via pyTMD | **not shipped** — multi-gigabyte registered download |
+| Tidal constants, real stations | NOAA CO-OPS published harmonic constants — water level *and* current ellipses | **shipped**, cached in `data/constituents/`, no account needed |
+| Tidal constants, platform site | TPXO9-atlas / FES2014 via pyTMD | **not shipped** — registered download |
 | Metocean | ERA5 via the Copernicus CDS API | **credentials required** |
 | S-N curve, Paris constants | DNV-RP-C203 Table 2-2, BS 7910 Table 8 | **not shipped** — paid standards |
 | Published NDT POD curves | ROV MPI, ACFM, flooded member detection | **not shipped** — needs digitising from source figures |
@@ -100,6 +139,18 @@ Headless, for the ledger only:
 
 ```bash
 PYTHONPATH=. python scripts/run_ledger.py --out ledger.csv --latex ledger.tex
+```
+
+Refresh the real tidal constants (NOAA, no account required):
+
+```bash
+PYTHONPATH=. python scripts/fetch_tides.py
+```
+
+Re-run the C3 settlement across every real tidal regime:
+
+```bash
+PYTHONPATH=. python scripts/settle_c3.py --samples 300
 ```
 
 Tests (solver verification, not UI):

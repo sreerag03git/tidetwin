@@ -1,0 +1,67 @@
+{
+  "label": "Woods Hole, MA (Cape Cod)",
+  "note": "strong reversing current, close pairing",
+  "retrieved": "2026-07-29",
+  "source": "NOAA CO-OPS published harmonic constants, Center for Operational Oceanographic Products and Services metadata API (mdapi). Water levels: harmonic constants from the accepted datum analysis. Currents: tidal current ellipse constants (major/minor amplitude, major-axis azimuth, Greenwich phase)",
+  "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi",
+  "licence": "US Government work, public domain",
+  "current_station": {
+    "id": "COD0910",
+    "name": "Woods Hole, North End",
+    "lat": 41.52297,
+    "lng": -70.693,
+    "bin": 1,
+    "bin_depth_m": 5.21,
+    "units": "meters, centimeters/second"
+  },
+  "water_level_station": {
+    "id": "8447930",
+    "name": "Woods Hole",
+    "lat": 41.523613,
+    "lng": -70.67111,
+    "units": "meters"
+  },
+  "separation_km": 1.82,
+  "constituents": {
+    "M2": {
+      "elev_amp_m": 0.229,
+      "elev_phase_gmt_deg": 35.3,
+      "major_amp_cm_s": 49.64,
+      "minor_amp_cm_s": 2.52,
+      "major_phase_gmt_deg": 350.9,
+      "azimuth_deg_true": 194.4
+    },
+    "S2": {
+      "elev_amp_m": 0.055,
+      "elev_phase_gmt_deg": 36.9,
+      "major_amp_cm_s": 6.12,
+      "minor_amp_cm_s": 0.87,
+      "major_phase_gmt_deg": 19.9,
+      "azimuth_deg_true": 194.4
+    },
+    "N2": {
+      "elev_amp_m": 0.076,
+      "elev_phase_gmt_deg": 20.9,
+      "major_amp_cm_s": 10.96,
+      "minor_amp_cm_s": 0.51,
+      "major_phase_gmt_deg": 310.9,
+      "azimuth_deg_true": 194.4
+    },
+    "K1": {
+      "elev_amp_m": 0.068,
+      "elev_phase_gmt_deg": 191.2,
+      "major_amp_cm_s": 3.5,
+      "minor_amp_cm_s": 0.57,
+      "major_phase_gmt_deg": 94.6,
+      "azimuth_deg_true": 194.4
+    },
+    "O1": {
+      "elev_amp_m": 0.062,
+      "elev_phase_gmt_deg": 201.5,
+      "major_amp_cm_s": 2.11,
+      "minor_amp_cm_s": 0.36,
+      "major_phase_gmt_deg": 76.3,
+      "azimuth_deg_true": 194.4
+    }
+  }
+}

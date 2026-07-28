@@ -1,0 +1,67 @@
+{
+  "label": "Mayport, FL (St John's entrance)",
+  "note": "strongly rotary current, semidiurnal Atlantic",
+  "retrieved": "2026-07-29",
+  "source": "NOAA CO-OPS published harmonic constants, Center for Operational Oceanographic Products and Services metadata API (mdapi). Water levels: harmonic constants from the accepted datum analysis. Currents: tidal current ellipse constants (major/minor amplitude, major-axis azimuth, Greenwich phase)",
+  "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi",
+  "licence": "US Government work, public domain",
+  "current_station": {
+    "id": "jx0101",
+    "name": "St Johns River LBB 6",
+    "lat": 30.39994,
+    "lng": -81.37637,
+    "bin": 1,
+    "bin_depth_m": 3.69,
+    "units": "meters, centimeters/second"
+  },
+  "water_level_station": {
+    "id": "8720218",
+    "name": "Mayport (Bar Pilots Dock)",
+    "lat": 30.398167,
+    "lng": -81.42789,
+    "units": "meters"
+  },
+  "separation_km": 4.95,
+  "constituents": {
+    "M2": {
+      "elev_amp_m": 0.667,
+      "elev_phase_gmt_deg": 26.4,
+      "major_amp_cm_s": 58.44,
+      "minor_amp_cm_s": 17.49,
+      "major_phase_gmt_deg": 11.8,
+      "azimuth_deg_true": 240.0
+    },
+    "S2": {
+      "elev_amp_m": 0.105,
+      "elev_phase_gmt_deg": 49.9,
+      "major_amp_cm_s": 9.57,
+      "minor_amp_cm_s": 4.17,
+      "major_phase_gmt_deg": 20.3,
+      "azimuth_deg_true": 240.0
+    },
+    "N2": {
+      "elev_amp_m": 0.144,
+      "elev_phase_gmt_deg": 8.2,
+      "major_amp_cm_s": 10.19,
+      "minor_amp_cm_s": 3.86,
+      "major_phase_gmt_deg": 6.0,
+      "azimuth_deg_true": 240.0
+    },
+    "K1": {
+      "elev_amp_m": 0.084,
+      "elev_phase_gmt_deg": 204.3,
+      "major_amp_cm_s": 5.4,
+      "minor_amp_cm_s": 3.81,
+      "major_phase_gmt_deg": 174.9,
+      "azimuth_deg_true": 240.0
+    },
+    "O1": {
+      "elev_amp_m": 0.058,
+      "elev_phase_gmt_deg": 211.0,
+      "major_amp_cm_s": 0.82,
+      "minor_amp_cm_s": 2.93,
+      "major_phase_gmt_deg": 133.6,
+      "azimuth_deg_true": 240.0
+    }
+  }
+}
