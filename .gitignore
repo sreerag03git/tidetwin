@@ -1,0 +1,37 @@
+# Secrets - never commit. The CDS API key lives here.
+.streamlit/secrets.toml
+
+# Downloaded datasets. Reproducible from the manifest; too large to version.
+data/era5_cache/*
+!data/era5_cache/.gitkeep
+data/constituents/*
+!data/constituents/.gitkeep
+
+# Tide models are multi-gigabyte and non-redistributable.
+data/tide_models/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+.coverage
+htmlcov/
+
+# Generated exports
+tidetwin_report.*
+tidetwin_claims_ledger.*
+ledger.csv
+ledger.tex
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,27 @@
+{
+  "generated": "2026-07-28",
+  "source": {
+    "document": "NREL FAST CertTest deck NRELOffshrBsline5MW_OC4Jacket_SubDyn.dat, encoding the OC4/UpWind reference jacket of Vorpahl, Popko & Kaufer (2013), 'Description of a basic model of the UpWind reference jacket for code comparison in the OC4 project under IEA Wind Annex 30', Fraunhofer IWES",
+    "url": "https://github.com/old-NWTC/FAST/blob/master/CertTest/5MW_Baseline/NRELOffshrBsline5MW_OC4Jacket_SubDyn.dat",
+    "tables": "JOINTS, MEMBERS, MEMBER X-SECTION PROPERTY",
+    "retrieved": "2026-07-28",
+    "transcription": "Coordinates, connectivity and property sets copied without modification. The 'role' column in oc4_sections.csv is our own label for readability and carries no numerical content."
+  },
+  "files": {
+    "oc4_joints.csv": {
+      "sha256": "722460f394959ac707bb44ed98a53c3c42c626c4a9522e3b94cc31c9f73332a4",
+      "bytes": 1892,
+      "rows": 64
+    },
+    "oc4_members.csv": {
+      "sha256": "734c9c5188356ede7e2a32ba2a3892d8f19caa69ed6ac6098bfc0df0d239d4ec",
+      "bytes": 1241,
+      "rows": 112
+    },
+    "oc4_sections.csv": {
+      "sha256": "a9c459ae2561fc5c0f057982db4223f5ab7d5c67c14a33af0ee442d86252afe9",
+      "bytes": 450,
+      "rows": 6
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# Optional: real tidal forcing. Install locally, not on Streamlit Cloud.
+#
+#   pip install -r requirements.txt -r requirements-data.txt
+#
+# pyTMD needs a tide model on disk. Neither TPXO9-atlas (OSU, free registration)
+# nor FES2014 (AVISO, free registration) may be redistributed, so they are not
+# in this repository. Download one, point TIDETWIN_TIDE_MODEL_DIR at it, and the
+# Environment tab switches the tidal constants from ASSUMED to MEASURED.
+
+-r requirements.txt
+pyTMD==3.0.9
+netCDF4==1.7.2
+xarray==2025.1.2

@@ -1,0 +1,25 @@
+# White base, near-black ink, one blue accent. Body text uses the reader's
+# system UI font; only numerals are monospaced, with tabular figures, so digits
+# align down a column. That split is applied by the CSS in tidetwin/ui.py.
+
+[theme]
+base = "light"
+primaryColor = "#1a5fb4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f7f8fa"
+textColor = "#14181c"
+font = "sans serif"
+
+[server]
+headless = true
+enableStaticServing = false
+maxUploadSize = 5
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# Long Monte Carlo runs sit behind an explicit Run button; never recompute one
+# because a slider moved.
+magicEnabled = false
+fastReruns = true

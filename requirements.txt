@@ -1,0 +1,29 @@
+# TideTwin runtime dependencies. Every version is pinned exactly: a claims
+# ledger that cannot be reproduced is not evidence.
+#
+# The solvers deliberately use only numpy, scipy.linalg, scipy.sparse and
+# scipy.special. scipy.optimize, .interpolate, .stats, .signal and .integrate
+# are NOT used - see tidetwin/numerics.py for why - which keeps the import
+# surface small enough to start quickly inside Streamlit Community Cloud's 1 GB.
+
+numpy==2.5.1
+scipy==1.18.0
+pandas==3.0.3
+pyarrow==24.0.0
+plotly==6.8.0
+streamlit==1.58.0
+
+# Static image export for the paper-ready 300 dpi PNG and vector PDF buttons.
+# The app degrades gracefully to HTML-only export if this is absent.
+kaleido==1.3.0
+
+# Copernicus Climate Data Store client. Light; needed for the ERA5 metocean
+# channels (C3 wind/wave terms, C5 thermal). Without credentials the app shows
+# DATA UNAVAILABLE and the dependent claims report UNTESTABLE - DATA MISSING.
+cdsapi==0.7.7
+
+# NOTE: pyTMD is intentionally NOT pinned here. It pulls netCDF4 and a large
+# dependency tree, and it is useless without a TPXO9-atlas or FES2014 model
+# download (multi-gigabyte, registration required) that cannot be shipped or
+# fetched inside the container. Install it locally from requirements-data.txt
+# when you have the model files. See DEPLOY.md.
