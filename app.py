@@ -53,6 +53,7 @@ from tidetwin.provenance import assumed, derived, measured, published
 from tidetwin.report import ReportInputs, to_html, to_markdown, to_text
 from tidetwin.unlock import gate_status
 from tidetwin.ui import (
+    cover,
     dataframe,
     figure_block,
     claims_strip,
@@ -581,6 +582,48 @@ with TABS[0]:
             with st.expander(f"Computations that did not complete ({len(art.errors)})", expanded=True):
                 for cid, why in sorted(art.errors.items()):
                     st.markdown(f"- **{cid}** — {why}")
+
+        # What this is, what it stands on, and how it gets from a tide to a
+        # verdict - before any number appears. The credentials row lists sources
+        # that are actually in the code, so it is checkable on the Provenance
+        # tab rather than being decoration.
+        cover(
+            tagline="Adversarial claims test bench · offshore jacket fatigue",
+            lead=(
+                "Nine claims from a paper on tidal-calibration fatigue monitoring, each "
+                "recomputed here from first principles and then <b>attacked</b>. Every "
+                "figure on every tab is solved at runtime and carries its provenance - "
+                "measured, published, derived or assumed. Nothing is quoted from the "
+                "paper except the claims themselves."
+            ),
+            credentials=[
+                "OC4 reference jacket",
+                "NOAA CO-OPS harmonics",
+                "3D Timoshenko frame FE",
+                "API RP 2A-WSD Morison",
+                "Doodson constituents",
+                "Newman-Raju SIF",
+                "shell BOEF joint flexibility",
+                "log-EnKF · SIR particle filter",
+                f"Monte Carlo {cfg.n_mc_samples}x",
+            ],
+            chain=[
+                ("Measured tide",
+                 "Harmonic constants from a real NOAA current and elevation station pair."),
+                ("Frame solve",
+                 "Morison drag and buoyancy on a 3D beam model with flexible joints."),
+                ("Strain ratio",
+                 "M2 amplitudes at two gauges bracketing the joint; their ratio is the signal."),
+                ("Nuisance budget",
+                 "Eight environmental channels propagated through with no crack present."),
+                ("Claims ledger",
+                 "Nine verdicts: pass, marginal, fail, or honestly untestable."),
+            ],
+            note=(
+                f"Reference structure and public tidal data. Verdicts below are for the "
+                f"inputs in the sidebar, seed {shown_cfg.seed}."
+            ),
+        )
 
         section("Nine claims at a glance", "colour is the verdict; the figure is what we computed")
         claims_strip([
