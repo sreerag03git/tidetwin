@@ -126,6 +126,49 @@ a {{ color:var(--tt-accent); }}
 .tt-verdict .vt {{ font-size:1.05rem; font-weight:670; }}
 .tt-verdict p {{ margin:0; font-size:.94rem; line-height:1.6; color:var(--tt-ink); }}
 
+/* ---------- headline finding ---------- */
+.tt-hero {{
+  border:1px solid var(--tt-line); border-top:4px solid; background:#fff;
+  padding:1.35rem 1.5rem 1.2rem; margin:.2rem 0 1.4rem; border-radius:5px;
+  box-shadow:0 1px 3px rgba(20,24,28,.05);
+}}
+.tt-hero .eyebrow {{
+  font-family:{MONO}; font-size:.7rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--tt-dim); margin-bottom:.5rem;
+}}
+.tt-hero .headline {{
+  font-size:1.32rem; font-weight:660; line-height:1.35; letter-spacing:-.015em;
+  margin-bottom:.7rem; max-width:62rem;
+}}
+.tt-hero .facts {{
+  display:flex; gap:2.2rem; flex-wrap:wrap; margin:.9rem 0 .8rem;
+  padding:.85rem 0; border-top:1px solid var(--tt-line);
+  border-bottom:1px solid var(--tt-line);
+}}
+.tt-hero .fact .k {{
+  font-family:{MONO}; font-size:1.42rem; font-weight:650;
+  font-variant-numeric:tabular-nums; line-height:1.1;
+}}
+.tt-hero .fact .l {{ color:var(--tt-dim); font-size:.76rem; margin-top:.2rem; }}
+.tt-hero .body {{ font-size:.92rem; line-height:1.62; color:var(--tt-ink); max-width:62rem; }}
+
+/* ---------- claims strip ---------- */
+.tt-strip {{ display:flex; gap:.4rem; flex-wrap:wrap; margin:.2rem 0 1.1rem; }}
+.tt-strip .c {{
+  flex:1 1 5.2rem; min-width:5.2rem; border:1px solid var(--tt-line);
+  border-top:3px solid; border-radius:4px; padding:.5rem .55rem; background:#fff;
+}}
+.tt-strip .c .id {{ font-family:{MONO}; font-weight:700; font-size:.9rem; }}
+.tt-strip .c .v {{
+  font-size:.66rem; font-weight:700; letter-spacing:.04em; margin-top:.15rem;
+  text-transform:uppercase; line-height:1.25;
+}}
+.tt-strip .c .n {{
+  font-family:{MONO}; font-size:.68rem; color:var(--tt-dim); margin-top:.25rem;
+  font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap;
+}}
+
 /* ---------- data-unavailable panel ---------- */
 .tt-unavail {{
   border:1px solid #c9ced4; border-left:5px solid var(--tt-dim);
@@ -215,10 +258,21 @@ _BOOT_CSS = f"""
 .tt-boot .rule {{
   width:3.2rem; height:2px; background:{INK}; margin:.55rem 0 .9rem;
 }}
-.tt-boot .say {{ color:{DIM}; font-size:.95rem; max-width:30rem; line-height:1.6; }}
+.tt-boot .say {{ color:{DIM}; font-size:1rem; max-width:34rem; line-height:1.65; }}
+.tt-boot .beats {{
+  display:flex; gap:2.4rem; flex-wrap:wrap; justify-content:center;
+  margin:2rem 0 .4rem; max-width:46rem;
+}}
+.tt-boot .beat {{ flex:1 1 11rem; max-width:13rem; text-align:left; }}
+.tt-boot .beat .n {{
+  font-family:{MONO}; font-size:.7rem; color:{ACCENT}; letter-spacing:.1em;
+  margin-bottom:.3rem;
+}}
+.tt-boot .beat .h {{ font-size:.88rem; font-weight:640; margin-bottom:.2rem; }}
+.tt-boot .beat .d {{ font-size:.8rem; color:{DIM}; line-height:1.55; }}
 .tt-boot .step {{
   font-family:{MONO}; font-size:.8rem; color:{ACCENT};
-  margin-top:1.5rem; letter-spacing:.02em;
+  margin-top:1.8rem; letter-spacing:.02em;
 }}
 .tt-boot .bar {{
   width:min(22rem, 70vw); height:2px; background:{LINE};
@@ -246,17 +300,67 @@ def loading_screen(step: str = "Assembling the jacket and solving the frame") ->
     sparse linear algebra rather than an artificial delay. It names what it is
     doing, so the wait is legible rather than a blank page.
     """
+    beats = (
+        ("01", "The claim", "A crack in an offshore jacket shifts the tidal strain "
+                            "ratio between two gauges by 11.1 percent."),
+        ("02", "The test", "Solve the OC4 jacket under real measured tides, then ask how "
+                           "much the sea moves that ratio with no crack at all."),
+        ("03", "The rule", "Every number is computed here and carries its provenance. "
+                           "Nothing is asserted."),
+    )
+    cards = "".join(
+        f'<div class="beat"><div class="n">{n}</div><div class="h">{h}</div>'
+        f'<div class="d">{d}</div></div>'
+        for n, h, d in beats
+    )
     return _BOOT_CSS + (
         '<div class="tt-boot">'
         '<div class="mark">TideTwin</div>'
         '<div class="rule"></div>'
-        '<div class="say">An adversarial test bench for the claims of a tidal-calibration '
-        "fatigue digital twin. Every number is computed at runtime and carries its "
-        "provenance.</div>"
+        '<div class="say">An adversarial test bench for a fatigue digital twin. '
+        "Built to falsify the method, not to demonstrate it.</div>"
+        f'<div class="beats">{cards}</div>'
         f'<div class="step">{step}</div>'
         '<div class="bar"></div>'
         "</div>"
     )
+
+
+def hero_result(
+    eyebrow: str, headline: str, body: str, colour: str, facts: list[tuple[str, str]]
+) -> None:
+    """The application's headline finding, presented as a result rather than an alarm.
+
+    The verdict is not softened - a FAIL says so, in those words, with the
+    numbers that produced it. But it is styled as a paper's key result, because a
+    red error banner reads as "this software is broken" rather than "this is what
+    the analysis found", and that misrepresents the work.
+    """
+    cells = "".join(
+        f'<div class="fact"><div class="k" style="color:{colour}">{k}</div>'
+        f'<div class="l">{lab}</div></div>'
+        for k, lab in facts
+    )
+    st.markdown(
+        f'<div class="tt-hero" style="border-top-color:{colour}">'
+        f'<div class="eyebrow">{eyebrow}</div>'
+        f'<div class="headline">{headline}</div>'
+        + (f'<div class="facts">{cells}</div>' if facts else "")
+        + f'<div class="body">{body}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def claims_strip(rows: list[tuple[str, str, str, str]]) -> None:
+    """Nine claims at a glance: id, status, colour, one-line computed value."""
+    cards = "".join(
+        f'<div class="c" style="border-top-color:{colour}">'
+        f'<div class="id">{cid}</div>'
+        f'<div class="v" style="color:{colour}">{status}</div>'
+        f'<div class="n" title="{value}">{value}</div></div>'
+        for cid, status, colour, value in rows
+    )
+    st.markdown(f'<div class="tt-strip">{cards}</div>', unsafe_allow_html=True)
 
 
 def masthead(subtitle: str) -> None:
