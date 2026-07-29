@@ -141,9 +141,12 @@ class NuisanceRanges:
     # Foundation stiffness retained after scour, as a fraction of the intact value.
     scour_factor_range: tuple[float, float] = (0.15, 1.0)
     # Differential drift between the two gauges over the record, microstrain.
-    fbg_drift_sd_ustrain: float = 0.5
+    # Set to the paper's own stated figure of 0.05 per year, not a pessimistic
+    # default: testing a claim against worse hardware than it specifies is not a
+    # test of the claim.
+    fbg_drift_sd_ustrain: float = 0.05
     # Random measurement noise on each gauge, microstrain rms.
-    fbg_noise_ustrain: float = 0.2
+    fbg_noise_ustrain: float = 0.05
     #: Correlation between the three storm-driven channels - wind-driven current,
     #: wave-induced offset and water-level surge. They share a cause, so drawing
     #: them independently understates the joint variance. 0.6 is a moderate
