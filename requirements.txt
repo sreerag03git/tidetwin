@@ -13,9 +13,23 @@ pyarrow==24.0.0
 plotly==6.8.0
 streamlit==1.58.0
 
-# Static image export for the paper-ready 300 dpi PNG and vector PDF buttons.
-# The app degrades gracefully to HTML-only export if this is absent.
-kaleido==1.3.0
+# NOTE: kaleido is deliberately NOT installed here.
+#
+# Kaleido 1.x renders by driving a headless Chrome. Streamlit Cloud has no Chrome
+# binary, so installing it there buys nothing and costs a lot: the import
+# succeeds, so a capability check based on the import passes, and the failure
+# surfaces later inside to_image - which is exactly how the first deploy crashed.
+# Plotly may also try to fetch Chrome on first call, stalling the initial load.
+#
+# Without it the app takes the HTML-export path immediately and cleanly. HTML
+# export is vector and loses no fidelity. For 300 dpi PNG and vector PDF, install
+# it locally alongside a Chrome binary:
+#
+#     pip install kaleido==1.3.0
+#     plotly_get_chrome
+#
+# The app probes the real capability at runtime and enables the buttons only when
+# it genuinely works.
 
 # Copernicus Climate Data Store client. Light; needed for the ERA5 metocean
 # channels (C3 wind/wave terms, C5 thermal). Without credentials the app shows

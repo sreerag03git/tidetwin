@@ -19,6 +19,9 @@ out in words beside its chip, and the palette clears WCAG AA contrast on white.
 
 from __future__ import annotations
 
+import traceback
+from contextlib import contextmanager
+
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -31,6 +34,7 @@ __all__ = [
     "masthead",
     "static_export_status",
     "quantity",
+    "panel",
     "status_chip",
     "figure_block",
     "unavailable_panel",
@@ -367,10 +371,21 @@ def static_export_status() -> tuple[bool, str]:
     ``to_image`` then raises at render time. This probes the real capability once
     by rendering a trivial figure, and caches the answer for the session.
     """
-    try:
-        import kaleido  # noqa: F401
-    except ImportError:
-        return False, "kaleido is not installed."
+    import importlib.util
+    import os
+
+    if os.environ.get("TIDETWIN_NO_STATIC_EXPORT"):
+        return False, "Static export disabled by TIDETWIN_NO_STATIC_EXPORT."
+    # find_spec, not import: importing kaleido can trigger plotly's Chrome
+    # discovery, which stalls on a host that has none. A feature nobody has asked
+    # for yet must never delay a page load.
+    if importlib.util.find_spec("kaleido") is None:
+        return False, (
+            "kaleido is not installed, which is deliberate for cloud deployment. "
+            "Interactive HTML export is vector and loses no fidelity. For 300 dpi PNG "
+            "and vector PDF, run locally with `pip install kaleido==1.3.0` then "
+            "`plotly_get_chrome`."
+        )
     try:
         go.Figure().to_image(format="png", width=8, height=8)
         return True, "Static image export is available."
@@ -439,3 +454,21 @@ def figure_block(fig: go.Figure, name: str, caption: str = "", height: int = 420
 
 def dataframe(df, **kw) -> None:
     st.dataframe(df, width="stretch", hide_index=True, **kw)
+
+
+@contextmanager
+def panel(name: str):
+    """Isolate a block so its failure cannot blank the rest of the page.
+
+    Streamlit renders top to bottom and an uncaught exception stops the script,
+    so one broken figure takes down every tab after it. That is how a missing
+    Chrome binary turned into an app with no graphs at all. Each section now
+    reports its own failure in place, with the traceback, and the rest still
+    renders.
+    """
+    try:
+        yield
+    except Exception as exc:  # noqa: BLE001 - the point is to contain it
+        st.error(f"**{name}** could not be rendered: {type(exc).__name__}: {exc}")
+        with st.expander(f"Traceback for {name}"):
+            st.code("".join(traceback.format_exception(exc)), language="text")
