@@ -32,6 +32,7 @@ __all__ = [
     "inject_theme",
     "loading_screen",
     "masthead",
+    "cover",
     "static_export_status",
     "quantity",
     "panel",
@@ -83,6 +84,48 @@ h4 {{ font-size:.98rem; font-weight:640; }}
 hr {{ border:0; border-top:1px solid var(--tt-line); margin:1.4rem 0; }}
 a {{ color:var(--tt-accent); }}
 
+/* ---------- cover ---------- */
+.tt-cover {{ padding:.2rem 0 1.4rem; }}
+.tt-cover .mark {{
+  font-family:{SANS}; font-size:2.6rem; font-weight:700; letter-spacing:-.03em;
+  color:var(--tt-ink); line-height:1;
+}}
+.tt-cover .mark .dot {{ color:var(--tt-accent); }}
+.tt-cover .tag {{
+  font-family:{SANS}; font-size:.76rem; font-weight:600; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--tt-dim); margin-top:.55rem;
+}}
+.tt-cover .lead {{
+  font-size:1.02rem; line-height:1.65; color:var(--tt-ink);
+  max-width:62rem; margin-top:.9rem;
+}}
+.tt-creds {{ display:flex; flex-wrap:wrap; gap:.4rem; margin:1.1rem 0 .2rem; }}
+.tt-creds span {{
+  font-family:{MONO}; font-size:.68rem; color:var(--tt-dim); background:#fff;
+  border:1px solid var(--tt-line); border-radius:2px; padding:.24rem .5rem;
+  white-space:nowrap;
+}}
+.tt-chain {{
+  display:grid; gap:0; margin:1.4rem 0 .4rem;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  border-top:1px solid var(--tt-line); border-bottom:1px solid var(--tt-line);
+}}
+.tt-chain .step {{ padding:.85rem 1rem .9rem 1rem; border-left:1px solid var(--tt-line); }}
+.tt-chain .step:first-child {{ border-left:0; padding-left:0; }}
+.tt-chain .n {{
+  font-family:{MONO}; font-size:.64rem; letter-spacing:.14em; color:var(--tt-accent);
+  display:block; margin-bottom:.3rem;
+}}
+.tt-chain .h {{ font-size:.84rem; font-weight:600; color:var(--tt-ink); display:block; }}
+.tt-chain .d {{ font-size:.76rem; line-height:1.5; color:var(--tt-dim); display:block; margin-top:.22rem; }}
+.tt-note {{
+  font-size:.76rem; color:var(--tt-dim); margin-top:.9rem;
+  padding-left:.7rem; border-left:2px solid var(--tt-line);
+}}
+@media (max-width:640px) {{
+  .tt-cover .mark {{ font-size:2rem; }}
+  .tt-chain .step {{ border-left:0; padding-left:0; }}
+}}
 /* ---------- masthead ---------- */
 .tt-head {{
   display:flex; align-items:baseline; gap:.85rem; flex-wrap:wrap;
@@ -367,6 +410,44 @@ def masthead(subtitle: str) -> None:
     st.markdown(
         f'<div class="tt-head"><span class="name">TideTwin</span>'
         f'<span class="tag">{subtitle}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+
+def cover(
+    tagline: str,
+    lead: str,
+    credentials,
+    chain,
+    note: str = "",
+) -> None:
+    """The cover block at the top of the landing page.
+
+    A reader arriving here has to learn three things before any number means
+    anything: what this is, what it is built on, and how it gets from a tide to a
+    verdict. The page used to open on a claims table and nothing else, which told
+    a first-time reader none of them.
+
+    ``credentials`` are the sources and methods actually in the code, so the row
+    is a claim that can be checked against the Provenance tab rather than
+    decoration. ``chain`` is ``(heading, description)`` per step, numbered here.
+    """
+    creds = "".join(f"<span>{c}</span>" for c in credentials)
+    steps = "".join(
+        f'<div class="step"><span class="n">{i + 1:02d}</span>'
+        f'<span class="h">{h}</span><span class="d">{d}</span></div>'
+        for i, (h, d) in enumerate(chain)
+    )
+    st.markdown(
+        f'<div class="tt-cover">'
+        f'<div class="mark">Tide<span class="dot">·</span>Twin</div>'
+        f'<div class="tag">{tagline}</div>'
+        f'<div class="lead">{lead}</div>'
+        f'<div class="tt-creds">{creds}</div>'
+        f'<div class="tt-chain">{steps}</div>'
+        + (f'<div class="tt-note">{note}</div>' if note else "")
+        + "</div>",
         unsafe_allow_html=True,
     )
 
