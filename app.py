@@ -34,9 +34,10 @@ from tidetwin.robustness import (
 )
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
+from tidetwin.abstract import LOWER_ZAKUM_JOINT, PAPER
 from tidetwin.claims.tests.c2_damage import MODE_SETS
 from tidetwin.economics.npv import EconomicInputs, tornado
-from tidetwin.fe.ljf import JointGeometry, LJFModel, ljf_quantity
+from tidetwin.fe.ljf import JointGeometry, LJFModel, ljf_quantity, shell_ljf
 from tidetwin.geometry.oc4 import (
     OC4_CITATION,
     WATER_DEPTH,
@@ -323,6 +324,39 @@ def _cycle(key: tuple):
 _CFG_CACHE: dict[tuple, AnalysisConfig] = {}
 
 
+def _code_fingerprint() -> str:
+    """A digest of the solver source, mixed into every cache key.
+
+    Deliberately not cached. Caching the fingerprint would freeze it across the
+    very hot reload it exists to notice, which is the whole point of it. It runs
+    once per rerun and stats about forty files, which is far below the cost of
+    anything else on the page.
+
+    Streamlit hot-reloads the script on edit but keeps ``st.cache_data`` entries
+    alive in the same process. Results computed before a change therefore
+    survive it, and a cached object built by the old code can reach new code
+    that expects a field it does not carry - which showed up as three tabs
+    reporting ``AttributeError`` on a property that does exist.
+
+    Keying on the source means editing a solver invalidates exactly the results
+    that solver produced. Costs one directory walk per session and nothing after
+    that. Missing files are ignored: a fingerprint that cannot be computed should
+    degrade to a stale cache, never to a crash on startup.
+    """
+    import hashlib
+    from pathlib import Path
+
+    h = hashlib.sha256()
+    root = Path(__file__).parent / "tidetwin"
+    try:
+        for p in sorted(root.rglob("*.py")):
+            h.update(p.name.encode())
+            h.update(str(p.stat().st_mtime_ns).encode())
+    except OSError:
+        return "unavailable"
+    return h.hexdigest()[:16]
+
+
 def _cfg_key(cfg: AnalysisConfig) -> tuple:
     tide = (
         tuple(sorted((k, tuple(sorted(v.items()))) for k, v in cfg.tide_table.items()))
@@ -333,7 +367,7 @@ def _cfg_key(cfg: AnalysisConfig) -> tuple:
         cfg.latitude, cfg.longitude, cfg.joint_id, cfg.sensor_offset_m, cfg.sensor_theta_deg,
         cfg.ljf_model.value, cfg.roughness_m, cfg.marine_growth_mm, cfg.record_days,
         cfg.crack_a_over_T, cfg.crack_2c_m, cfg.n_mc_samples, cfg.n_theta, cfg.seed, tide,
-        cfg.tide_station,
+        cfg.tide_station, _code_fingerprint(),
     )
     _CFG_CACHE[k] = cfg
     return k
@@ -710,6 +744,37 @@ with TABS[1]:
                 "crack to change. Select SHELL to make them meaningful.",
             )
 
+        # The physical reason C2 fails lives here, so it belongs on the page as a
+        # picture and not only as a sentence in the verdict.
+        if art.c2_stiffness is not None:
+            section("This joint against the abstract's own joint",
+                    "the springs a 10 percent reduction is taken from")
+            zak = shell_ljf(LOWER_ZAKUM_JOINT)
+            here = art.c2_stiffness.springs
+            modes = ["axial", "ipb", "opb"]
+            labels = ["axial, N/m", "in-plane bending, N.m/rad", "out-of-plane bending, N.m/rad"]
+            fig = go.Figure()
+            fig.add_bar(name=f"J{cfg.joint_id}, as analysed", x=labels,
+                        y=[here[m] for m in modes], marker_color="#35b6c4")
+            fig.add_bar(name="the abstract's Lower Zakum K-joint", x=labels,
+                        y=[zak.k_axial, zak.k_ipb, zak.k_opb], marker_color="#c8871b")
+            fig.update_layout(
+                title="Local joint stiffness, shell beam-on-elastic-foundation",
+                yaxis_title="stiffness (log scale)", yaxis_type="log", barmode="group",
+                legend=dict(orientation="h", y=-0.25),
+            )
+            figure_block(fig, "joint_stiffness_comparison", height=400)
+            st.caption(
+                f"The abstract's K-joint (762 mm chord, 25 mm wall, 45 degree brace, "
+                f"gamma = {PAPER.gamma:.1f}) is **softer** than this frame's joint in every "
+                "mode, most of all in out-of-plane bending. A softer joint carries more of "
+                "the load path locally, so it is the case where a stiffness reduction should "
+                "matter most - which is exactly why C2 is also evaluated there. It comes out "
+                "slightly less sensitive, not more. Note the log scale: out-of-plane bending "
+                "is two orders of magnitude softer than axial, and it is the mode that "
+                "carries what little damage sensitivity the strain ratio has."
+            )
+
         section("How much do the modelling choices matter?",
                 "measured, not asserted - the spread is the honest precision")
         with st.spinner("Sweeping joints and joint-flexibility models..."):
@@ -917,12 +982,22 @@ with TABS[3]:
                          "harmonic fit of the frame solve", uncertainty=r.ratio_se))
         quantity(derived(r.amplitude_upper * 1e6, "ustrain", "M2 amplitude, upper gauge", [], "harmonic fit"))
         quantity(derived(r.amplitude_lower * 1e6, "ustrain", "M2 amplitude, lower gauge", [], "harmonic fit"))
+        quantity(derived(
+            r.resolution_margin, "x",
+            "headroom over the sensor floor", [],
+            f"weaker gauge's M2 amplitude divided by the {r.resolution_ustrain:g} microstrain "
+            "resolution the abstract specifies",
+            note="below 1 the signal cannot be read at all",
+        ))
         if r.below_fbg_resolution:
             unavailable_panel(
                 "Signal below sensor resolution",
-                "Both M2 strain amplitudes are under 1 microstrain, the resolution of a typical "
-                "commercial FBG interrogator. The ratio between two unmeasurable quantities is "
-                "not measurable, whatever value the solver returns for it.",
+                f"The weaker gauge reads {min(r.amplitude_upper, r.amplitude_lower) * 1e6:.3f} "
+                f"microstrain against the {r.resolution_ustrain:g} microstrain resolution the "
+                "abstract specifies for its FBG interrogator. The ratio between two quantities "
+                "that cannot be measured is not measurable, whatever value the solver returns "
+                "for it. This is the paper's own sensor specification, not a pessimistic one "
+                "chosen here.",
             )
         st.markdown(by_id["C1"].detail)
 
@@ -1077,6 +1152,46 @@ with TABS[4]:
 
             section("C3 - nuisance variance budget", "how much the sea moves it with no crack at all")
             n = art.c3
+
+            # The whole finding in one picture: the spread of the ratio with no
+            # crack anywhere, against the step a crack is claimed to produce.
+            sig = 0.111
+            base = n.baseline_ratio
+            fa = n.false_alarm_fraction(sig)
+            fig = go.Figure()
+            fig.add_histogram(x=n.joint_samples, nbinsx=70, marker_color="#35b6c4",
+                              name="intact ratio under environmental variation")
+            fig.add_vline(x=base, line_color="#111418", line_width=2,
+                          annotation_text="intact", annotation_position="top left")
+            for sgn, pos in ((+1, "top right"), (-1, "top left")):
+                fig.add_vline(
+                    x=base * (1 + sgn * sig), line_color="#b3261e", line_dash="dash",
+                    line_width=2,
+                    annotation_text=f"claimed damage step ({sgn * sig * 100:+.1f} %)",
+                    annotation_position=pos,
+                )
+            fig.update_layout(
+                title="With no crack at all: where the sea alone puts the strain ratio",
+                xaxis_title="intact M2 strain ratio", yaxis_title="Monte Carlo draws",
+                showlegend=False, hovermode="x",
+            )
+            figure_block(fig, "c3_noise_vs_signal", height=430)
+            st.markdown(
+                f"**{fa * 100:.1f} percent of draws with no damage present already move the "
+                f"ratio by at least the {sig * 100:.1f} percent a crack is claimed to move "
+                "it.** Every one of those is a false alarm from a detector set at the "
+                "claimed signature. The dashed lines are where a crack is supposed to put "
+                "the ratio; the histogram is where the sea puts it on its own. They overlap, "
+                "and that overlap is the failure - no threshold placed on this axis separates "
+                "a cracked structure from an intact one on a rough fortnight."
+            )
+            st.caption(
+                "Counted two-sided on the magnitude of the change: a detector watching for an "
+                "11.1 percent shift cannot know which way a real crack would push this ratio. "
+                "C2 finds the sign depends on which joint spring softens - axial drives it "
+                "down, out-of-plane bending drives it up."
+            )
+
             rnd, sysm = n.split_random_systematic()
             chans = sorted(n.per_channel_sd.items(), key=lambda kv: kv[1])
             fig = go.Figure(go.Bar(
@@ -1259,6 +1374,67 @@ with TABS[5]:
             for r in c6.reports.values():
                 st.caption(f"**{r.name}** &mdash; {r.comment}")
 
+            # The abstract's own convergence criterion, drawn so the reader can
+            # see the thing that matters: the do-nothing baseline sits inside the
+            # same target box, which is what makes the criterion uninformative.
+            ac = c6.abstract_convergence()
+            section("The abstract's own convergence criterion",
+                    "within 8 percent of true damage by month 18 - and what that is worth")
+            fig = go.Figure()
+            fig.add_shape(
+                type="rect", x0=0, x1=ac["by_years"], y0=0, y1=ac["tolerance"] * 100,
+                fillcolor="#1a7f43", opacity=0.10, line=dict(width=0), layer="below",
+            )
+            fig.add_annotation(
+                x=ac["by_years"] / 2, y=ac["tolerance"] * 100, yshift=12, showarrow=False,
+                text=f"the claim: within {ac['tolerance'] * 100:.0f} % by month "
+                     f"{ac['by_years'] * 12:.0f}",
+                font=dict(color="#1a7f43", size=12),
+            )
+            for nm in c6.ensembles:
+                dash = "dash" if nm == "no-update baseline" else None
+                fig.add_scatter(
+                    x=c6.times_years, y=c6.relative_error(nm) * 100, name=nm,
+                    line=dict(dash=dash, width=3 if nm == "log-EnKF" else 2),
+                )
+            fig.add_hline(y=ac["tolerance"] * 100, line_dash="dot", line_color="#1a7f43")
+            fig.add_vline(x=ac["by_years"], line_dash="dot", line_color="#1a7f43")
+            fig.update_layout(
+                title="Distance from the truth over time, against the abstract's target",
+                xaxis_title="time, years", yaxis_title="|estimate - truth| / truth, %",
+                hovermode="x unified", legend=dict(orientation="h", y=-0.22),
+            )
+            figure_block(fig, "c6_abstract_convergence", height=420)
+            cc6 = st.columns(3)
+            with cc6[0]:
+                quantity(derived(
+                    ac["error_at_deadline"] * 100.0, "%", "log-EnKF at month 18", [],
+                    "|ensemble mean - truth| / truth at the abstract's deadline",
+                ))
+            with cc6[1]:
+                quantity(derived(
+                    ac["baseline_error_at_deadline"] * 100.0, "%",
+                    "no-update baseline at month 18", [],
+                    "the same distance for a filter that assimilates nothing",
+                    note="assimilates nothing and still passes",
+                ))
+            with cc6[2]:
+                quantity(assumed(
+                    "yes" if ac["discriminates"] else "no", "-",
+                    "does the criterion discriminate?",
+                ))
+            if ac["met"] and ac["baseline_also_meets"]:
+                st.warning(
+                    "**The criterion is met, and it is worthless.** Both curves start inside "
+                    "the target box and stay there. Assimilating nothing at all clears the "
+                    "abstract's 8-percent-by-month-18 test just as comfortably as the "
+                    "log-EnKF does, so passing it is not evidence that the filter works. "
+                    "What separates the estimators is the calibration comparison below - "
+                    "CRPS, coverage and the rank histogram - and that is what C6's status "
+                    "rests on.",
+                    icon=":material/warning:",
+                )
+
             cols = st.columns(2)
             with cols[0]:
                 fig = go.Figure()
@@ -1322,6 +1498,33 @@ with TABS[6]:
                 f"{n_j} ADNOC jackets - so it is divided by {n_j} to sit on this axis. "
                 f"Across the fleet this model gives {r8.fleet_mean / 1e6:.1f} MUSD. The "
                 "commercial case is not where the paper is aggressive."
+            )
+
+            # Comparing a fleet claim against a per-jacket model was a real error
+            # here, and one that ran against the paper. Both bases are drawn so
+            # the comparison cannot be misread again.
+            fig = go.Figure()
+            fig.add_bar(name="this model", x=["per jacket", f"fleet of {n_j}"],
+                        y=[r8.mean / 1e6, r8.fleet_mean / 1e6], marker_color="#35b6c4",
+                        text=[f"{r8.mean / 1e6:.2f}", f"{r8.fleet_mean / 1e6:.1f}"],
+                        textposition="outside")
+            fig.add_bar(name="the abstract", x=["per jacket", f"fleet of {n_j}"],
+                        y=[19.9 / n_j, 19.9], marker_color="#c8871b",
+                        text=[f"{19.9 / n_j:.2f}", "19.9"], textposition="outside")
+            fig.update_layout(
+                title="Like for like: the claim and this model on both bases",
+                yaxis_title="net present value, million USD", barmode="group",
+                legend=dict(orientation="h", y=-0.18),
+            )
+            figure_block(fig, "c8_basis", height=380)
+            st.caption(
+                "On either basis this model is the **more** optimistic of the two. C8 used to "
+                f"compare {r8.mean / 1e6:.2f} MUSD per jacket against the abstract's 19.9 "
+                f"MUSD fleet figure and read that as the paper being an order of magnitude "
+                "out; the arithmetic was the error, not the paper. Fleet scales linearly "
+                "here - no shared interrogator, no shared spares, no mobilisation spread "
+                "across platforms - all of which would raise it further, so this understates "
+                "the fleet case rather than flattering it."
             )
 
             with st.spinner("tornado sensitivity..."):

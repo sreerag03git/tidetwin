@@ -375,3 +375,60 @@ def test_random_systematic_split_reproduces_the_measured_joint_sigma():
     rnd, sysm = r.split_random_systematic()
     assert float(np.hypot(rnd, sysm)) == pytest.approx(r.joint_sd, rel=1e-9)
     assert rnd > 0 and sysm > 0
+
+
+# ---------------------------------------------------------------------------
+# The false-alarm fraction: the C3 failure stated without statistics.
+
+
+def _res(samples, baseline=2.0):
+    return NuisanceResult(
+        baseline_ratio=baseline,
+        per_channel_sd={},
+        per_channel_samples={},
+        joint_sd=float(np.std(samples, ddof=1)),
+        joint_samples=np.asarray(samples, float),
+        n_samples=len(samples),
+        record_days=14.0,
+        seed=1,
+        ranges=NuisanceRanges(),
+    )
+
+
+def test_no_false_alarms_when_the_sea_never_moves_the_ratio():
+    assert _res(np.full(200, 2.0)).false_alarm_fraction(0.111) == 0.0
+
+
+def test_every_draw_is_a_false_alarm_when_the_noise_dwarfs_the_signal():
+    # All draws sit 50 percent away from the baseline, far past an 11.1 percent step.
+    assert _res(np.full(200, 3.0)).false_alarm_fraction(0.111) == 1.0
+
+
+def test_the_count_is_two_sided():
+    """A detector watching for an 11.1 percent shift cannot know the sign.
+
+    C2 finds the sign of a real crack's effect depends on which joint spring
+    softens, so counting only upward excursions would understate the false-alarm
+    rate by about half.
+    """
+    down = _res(np.full(100, 2.0 * (1 - 0.2)))
+    assert down.false_alarm_fraction(0.111) == 1.0
+
+
+def test_the_threshold_is_relative_to_the_baseline_not_absolute():
+    """A 0.2 absolute excursion is a false alarm on a ratio of 2 but not on one of 20.
+
+    Getting this wrong would make the verdict depend on which joint was chosen,
+    since the intact ratio varies by orders of magnitude across the structure.
+    """
+    assert _res(np.full(50, 2.0 + 0.3), baseline=2.0).false_alarm_fraction(0.111) == 1.0
+    assert _res(np.full(50, 20.0 + 0.3), baseline=20.0).false_alarm_fraction(0.111) == 0.0
+
+
+def test_only_draws_past_the_signature_count():
+    half = np.concatenate([np.full(50, 2.0), np.full(50, 2.0 * 1.5)])
+    assert _res(half).false_alarm_fraction(0.111) == pytest.approx(0.5)
+
+
+def test_a_degenerate_baseline_reports_nan_rather_than_dividing_by_zero():
+    assert np.isnan(_res(np.ones(10), baseline=0.0).false_alarm_fraction())

@@ -40,14 +40,38 @@ class RatioResult:
     constituent: str
 
     @property
-    def below_fbg_resolution(self) -> bool:
-        """True if the M2 signal is smaller than 1 microstrain.
+    def resolution_ustrain(self) -> float:
+        """The sensor the paper proposes, not a generic one.
 
-        A commercial FBG interrogator resolves about 1 microstrain, a high-end one
-        about 0.1. If the tidal signal itself sits below that, no amount of
-        processing recovers it, and this flag says so before any ratio is quoted.
+        The abstract specifies 0.1 microstrain. A typical commercial interrogator
+        manages about 1, so judging the signal against 1 would be testing a
+        sensor ten times worse than the one under discussion - and a finding that
+        the signal is "below resolution" means nothing if the resolution assumed
+        is not the resolution claimed.
         """
-        return max(self.amplitude_upper, self.amplitude_lower) < 1.0e-6
+        from ...abstract import PAPER
+
+        return PAPER.fbg_resolution_ustrain
+
+    @property
+    def resolution_margin(self) -> float:
+        """Weaker gauge's M2 amplitude as a multiple of the sensor resolution.
+
+        Below 1 the signal cannot be read at all. The ratio is between the two
+        gauges, so the weaker one governs: a strong upper reading does not rescue
+        a lower reading that is under the floor.
+        """
+        weaker = min(self.amplitude_upper, self.amplitude_lower)
+        return float(weaker * 1e6 / self.resolution_ustrain)
+
+    @property
+    def below_fbg_resolution(self) -> bool:
+        """True if the M2 signal is under the resolution the paper specifies.
+
+        If the tidal signal itself sits below the floor, no amount of processing
+        recovers it, and this flag says so before any ratio is quoted.
+        """
+        return self.resolution_margin < 1.0
 
 
 def intact_ratio(

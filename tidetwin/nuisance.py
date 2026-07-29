@@ -397,6 +397,25 @@ class NuisanceResult:
     def dispersion_kind(self) -> str:
         return "robust scale (0.7413 x IQR)" if self.heavy_tailed else "standard deviation"
 
+    def false_alarm_fraction(self, signature: float = 0.111) -> float:
+        """Share of nuisance-only draws that already look like the claimed damage.
+
+        The most direct statement of the C3 failure there is, and the one that
+        needs no statistics to read: with no crack anywhere in the structure,
+        this is how often the sea alone moves the strain ratio by at least as
+        much as a crack is claimed to move it. Every one of those would be a
+        false alarm from a detector set at the claimed signature.
+
+        Counted two-sided, on the magnitude of the change, because a detector
+        watching for an 11.1 percent shift has no way to know which way a real
+        crack would push this particular ratio - C2 finds the sign depends on
+        which joint spring softens.
+        """
+        if not self.baseline_ratio or self.joint_samples.size == 0:
+            return float("nan")
+        rel = np.abs(self.joint_samples - self.baseline_ratio) / abs(self.baseline_ratio)
+        return float(np.mean(rel >= signature))
+
     @property
     def joint_sd_standard_error(self) -> float:
         """Monte Carlo standard error on the joint sigma itself.
