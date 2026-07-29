@@ -530,20 +530,35 @@ def _c8(art: Artifacts) -> ClaimResult:
     if art.c8 is None:
         return _missing("C8", "Run the analysis to compute the NPV.", "")
     r = art.c8
-    claimed = 19.9e6
+    # The abstract's headline is a *fleet* figure - "For 30 ADNOC jackets ...
+    # $19.9 million net over 20 years" - while everything modelled here is per
+    # jacket. Comparing the two directly was an error, and one that made the
+    # paper look far more optimistic than it is: per jacket the abstract claims
+    # 19.9/30 MUSD, which this model comfortably exceeds.
+    n = r.inputs.n_jackets
+    claimed_fleet = 19.9e6
+    claimed_each = claimed_fleet / max(n, 1)
     detail = (
-        f"Expected NPV {r.mean / 1e6:.2f} MUSD (median {r.median / 1e6:.2f}, "
+        f"Per jacket, expected NPV {r.mean / 1e6:.2f} MUSD (median {r.median / 1e6:.2f}, "
         f"p05 {r.percentile(5) / 1e6:.2f}, p95 {r.percentile(95) / 1e6:.2f}), with a "
-        f"{r.probability_positive * 100:.0f} percent chance of being positive at all, against a "
-        f"claimed {claimed / 1e6:.1f} MUSD. Every input is ASSUMED, so this is a scenario, not a "
-        "result: the tornado plot showing which assumption the answer is hostage to is the "
-        "usable output. The economic case is also downstream of C3 - a method that does not "
-        "detect reliably cannot avoid the campaigns this NPV credits it with avoiding."
+        f"{r.probability_positive * 100:.0f} percent chance of being positive at all. "
+        f"Across the {n} jackets the abstract counts, that is {r.fleet_mean / 1e6:.1f} MUSD "
+        f"against its claimed {claimed_fleet / 1e6:.1f}. On the same per-jacket basis the "
+        f"claim is {claimed_each / 1e6:.2f} MUSD, so this model is the "
+        + ("more" if r.mean > claimed_each else "less")
+        + " optimistic of the two - the paper's commercial case is not the aggressive part "
+        "of it. Fleet NPV scales linearly here: no shared interrogator, no shared spares, "
+        "no mobilisation spread across platforms, all of which would raise it further. "
+        "Every input is ASSUMED, so this is a scenario, not a result: the tornado plot "
+        "showing which assumption the answer is hostage to is the usable output. The "
+        "economic case is also downstream of C3 - a method that does not detect reliably "
+        "cannot avoid the campaigns this NPV credits it with avoiding, and that, not the "
+        "cost model, is what decides whether any of it is earned."
     )
     return ClaimResult(
         "C8",
         Status.UNTESTABLE_DATA,
-        f"{r.mean / 1e6:.2f} MUSD (all inputs ASSUMED)",
+        f"{r.fleet_mean / 1e6:.1f} MUSD over {n} jackets (all inputs ASSUMED)",
         detail,
         _contamination(art) + ("every economic input is ASSUMED",),
     )
