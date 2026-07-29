@@ -1419,9 +1419,13 @@ with TABS[5]:
                     note="assimilates nothing and still passes",
                 ))
             with cc6[2]:
-                quantity(assumed(
-                    "yes" if ac["discriminates"] else "no", "-",
-                    "does the criterion discriminate?",
+                _b = ac["baseline_error_at_deadline"]
+                quantity(derived(
+                    ac["error_at_deadline"] / _b if _b else float("nan"), "x",
+                    "filter error / baseline error", [],
+                    "ratio of the two distances above, at the abstract's month-18 checkpoint",
+                    note=("above 1: further from the truth than assimilating nothing"
+                          if _b and ac["error_at_deadline"] > _b else ""),
                 ))
             if ac["met"] and ac["baseline_also_meets"]:
                 st.warning(
