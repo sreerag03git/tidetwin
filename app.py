@@ -23,7 +23,7 @@ import pandas as pd  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 import streamlit as st  # noqa: E402
 
-from tidetwin.analysis import AnalysisConfig, run_full, run_quick
+from tidetwin.analysis import AnalysisConfig, normalise, run_full, run_quick
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
 from tidetwin.damage.crack_ljf import shell_fe_status
@@ -266,9 +266,34 @@ def sidebar() -> AnalysisConfig:
     )
 
 
-@st.cache_data(show_spinner="Solving the frame...", max_entries=8)
+@st.cache_data(show_spinner=False, max_entries=8)
 def _quick(key: tuple) -> Artifacts:
     return run_quick(_cfg_from_key(key))
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _full(key: tuple) -> Artifacts:
+    """The full claims analysis, cached on the inputs so it runs once."""
+    return run_full(_cfg_from_key(key))
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def _cycle(key: tuple):
+    """One tidal cycle of real frame solves, for the animation."""
+    cfg = _cfg_from_key(key)
+    try:
+        from tidetwin.geometry.oc4 import build_jacket, sensor_pair
+        from tidetwin.simulate import simulate_cycle
+
+        cfg, _notes = normalise(cfg)
+        tables = load_tables()
+        pair = sensor_pair(tables, cfg.joint_id, cfg.sensor_offset_m,
+                           np.radians(cfg.sensor_theta_deg))
+        build = build_jacket(ljf_model=cfg.ljf_model,
+                             marine_growth_mm=cfg.marine_growth_mm, tables=tables)
+        return simulate_cycle(build, pair, cfg.constituents(), cfg.hydro(), n_frames=36)
+    except Exception:  # noqa: BLE001 - the tab must still render without it
+        return None
 
 
 _CFG_CACHE: dict[tuple, AnalysisConfig] = {}
@@ -301,15 +326,35 @@ key = _cfg_key(cfg)
 # surface: a few seconds of real work. Show what is happening instead of a blank
 # page, and clear it the moment the result is in.
 _boot = st.empty()
-if "booted" not in st.session_state:
+_first = "booted" not in st.session_state
+if _first:
     _boot.markdown(loading_screen(), unsafe_allow_html=True)
 art_quick = _quick(key)
 st.session_state.booted = True
-_boot.empty()
 
 if "full" not in st.session_state:
     st.session_state.full = None
     st.session_state.full_key = None
+
+# Run the full analysis automatically the first time. Showing nine claims as
+# "not run yet" on arrival makes the ledger look broken, and a reader has no way
+# to tell that from a ledger that genuinely could not be settled. The result is
+# cached on the inputs, so this cost is paid once.
+if _first and st.session_state.full is None:
+    _boot.markdown(
+        loading_screen("Running the claims analysis - Monte Carlo over nine claims"),
+        unsafe_allow_html=True,
+    )
+    try:
+        st.session_state.full = _full(key)
+        st.session_state.full_key = key
+    except Exception as exc:  # noqa: BLE001 - the app must still open
+        st.session_state.full = None
+        st.warning(
+            f"The automatic analysis did not complete ({type(exc).__name__}: {exc}). "
+            "Press Run full analysis to retry."
+        )
+_boot.empty()
 
 # A code reload or a redeploy re-defines the dataclasses, which leaves anything
 # held in session state an instance of the *old* class. Reading a field the new
@@ -365,11 +410,17 @@ top[1].metric("Claims refuted", sum(r.status is Status.FAIL for r in results))
 top[2].metric(
     "Cannot be settled",
     sum(r.status in (Status.UNTESTABLE_DATA, Status.UNTESTABLE_PHYSICAL) for r in results),
-    help="Not a failure. The data or the physical test needed to settle these does not "
-    "exist here, and saying so is more useful than guessing.",
+    help="Not a failure, and not the same as 'not run'. The data or the physical test "
+    "needed to settle these does not exist here; the Provenance tab lists exactly what "
+    "would unlock each one.",
 )
+_pending = sum(r.status is Status.NOT_RUN for r in results)
+if _pending:
+    top[2].caption(f"{_pending} more awaiting analysis")
 with top[3]:
-    if st.button("Run full analysis", type="primary", width="stretch"):
+    stale = st.session_state.full is not None and st.session_state.full_key != key
+    label = "Re-run with current inputs" if stale else "Re-run analysis"
+    if st.button(label, type="primary" if stale else "secondary", width="stretch"):
         bar = st.progress(0.0, "starting")
         try:
             st.session_state.full = run_full(cfg, lambda f, m: bar.progress(min(f, 1.0), m))
@@ -377,17 +428,14 @@ with top[3]:
         finally:
             bar.empty()
         st.rerun()
-    if st.session_state.full is not None and st.session_state.full_key != key:
-        st.caption("Inputs changed since the last full run. Showing the quick pass.")
+    if stale:
+        st.caption("Inputs changed since the last run. Figures below are from the previous one.")
 
 if art.c3 is None:
     st.info(
-        "**Available now:** Structure (3D jacket, modal shift), Environment (tidal "
-        "ellipses and forcing), Sensing (strain time series, harmonic amplitudes). "
-        "**Press Run full analysis** for the Monte Carlo work: the C2 damage contour, "
-        "the C3 nuisance budget and its convergence and break-even, C4 detection times, "
-        "C6 filter calibration, C8 economics and C9 probability of detection.",
-        icon=None,
+        "The Monte Carlo claims have not been computed for these inputs yet. Press "
+        "**Re-run with current inputs** above. Structure, Environment and Sensing are "
+        "available regardless."
     )
 
 TABS = st.tabs(
@@ -479,6 +527,103 @@ with TABS[1]:
             title="OC4 jacket, target joint marked",
         )
         figure_block(fig, "oc4_geometry", "Legs in accent, braces in grey. Mudline at z = -50.001 m.", 520)
+
+        section("Tidal cycle simulation",
+                "the frame solved at every phase of one M2 cycle - press play")
+        with st.spinner("Solving the frame through a tidal cycle..."):
+            cyc = _cycle(key)
+        if cyc is None:
+            unavailable_panel("Simulation unavailable",
+                              "The tidal cycle could not be solved for these inputs.")
+        else:
+            j = TABLES.joints
+            edges = [(int(m.joint_i), int(m.joint_j), int(m.prop_set))
+                     for _mid, m in TABLES.members.iterrows()]
+            idx = {jid: n for n, jid in enumerate(TABLES.joints.index)}
+
+            def frame_traces(shape):
+                xs, ys, zs = [], [], []
+                for a, b, _ps in edges:
+                    pa, pb = shape[idx[a]], shape[idx[b]]
+                    xs += [pa[0], pb[0], None]
+                    ys += [pa[1], pb[1], None]
+                    zs += [pa[2], pb[2], None]
+                return go.Scatter3d(x=xs, y=ys, z=zs, mode="lines",
+                                    line=dict(color="#1a5fb4", width=3),
+                                    hoverinfo="skip", showlegend=False)
+
+            base = []
+            for a, b, _ps in edges:
+                pa, pb = cyc.nodes_undeformed[idx[a]], cyc.nodes_undeformed[idx[b]]
+                base.append((pa, pb))
+            gx, gy, gz = [], [], []
+            for pa, pb in base:
+                gx += [pa[0], pb[0], None]; gy += [pa[1], pb[1], None]; gz += [pa[2], pb[2], None]
+
+            fig = go.Figure(
+                data=[
+                    go.Scatter3d(x=gx, y=gy, z=gz, mode="lines",
+                                 line=dict(color="#c9ced4", width=1),
+                                 name="undeformed", hoverinfo="skip"),
+                    frame_traces(cyc.displaced[0]),
+                ],
+                frames=[
+                    go.Frame(data=[frame_traces(cyc.displaced[k])], traces=[1],
+                             name=f"{cyc.hours[k]:.2f}")
+                    for k in range(len(cyc.hours))
+                ],
+            )
+            fig.update_layout(
+                title=f"Jacket response through one M2 cycle "
+                      f"(deflection exaggerated {cyc.exaggeration:,.0f}x)",
+                scene=dict(xaxis_title="x, m", yaxis_title="y, m",
+                           zaxis_title="z, m (SWL = 0)", aspectmode="data"),
+                updatemenus=[dict(
+                    type="buttons", showactive=False, x=0.02, y=0.06, xanchor="left",
+                    buttons=[
+                        dict(label="Play", method="animate",
+                             args=[None, dict(frame=dict(duration=90, redraw=True),
+                                              fromcurrent=True, mode="immediate")]),
+                        dict(label="Pause", method="animate",
+                             args=[[None], dict(frame=dict(duration=0, redraw=False),
+                                                mode="immediate")]),
+                    ])],
+                sliders=[dict(
+                    active=0, x=0.12, len=0.84, y=0.02,
+                    currentvalue=dict(prefix="hours into the cycle: "),
+                    steps=[dict(method="animate", label=f"{h:.1f}",
+                                args=[[f"{h:.2f}"], dict(mode="immediate",
+                                      frame=dict(duration=0, redraw=True))])
+                           for h in cyc.hours],
+                )],
+            )
+            figure_block(
+                fig, "tidal_cycle_simulation",
+                f"{cyc.n_solves} full frame solves, one per phase. True peak deflection is "
+                f"{cyc.max_true_deflection_mm:.2f} mm on a 70 m structure, so it is drawn "
+                f"{cyc.exaggeration:,.0f}x larger to be visible. The lean rotates rather than "
+                "reversing, because the tidal current traces an ellipse.", 560,
+            )
+
+            fig = go.Figure()
+            fig.add_scatter(x=cyc.hours, y=cyc.strain_upper, name="upper gauge")
+            fig.add_scatter(x=cyc.hours, y=cyc.strain_lower, name="lower gauge")
+            fig.add_scatter(x=cyc.hours, y=np.hypot(cyc.current_u, cyc.current_v),
+                            name="current speed, m/s", yaxis="y2",
+                            line=dict(dash="dot", color="#5b646d"))
+            fig.update_layout(
+                title="Gauge strains through the same cycle",
+                xaxis_title="hours into the M2 cycle",
+                yaxis_title="axial surface strain, microstrain",
+                yaxis2=dict(title="current speed, m/s", overlaying="y", side="right",
+                            showgrid=False),
+            )
+            figure_block(
+                fig, "tidal_cycle_strains",
+                "Both gauges swing together — that common-mode motion is what dividing one "
+                "by the other is meant to reject. Drag goes as speed squared, so the strain "
+                "peaks twice per cycle while the current reverses once.", 360,
+            )
 
         section("Local joint flexibility", "how much the chord wall gives where a brace lands")
         geom = JointGeometry(1.2, 0.035, 0.8, 0.02, np.radians(29.4))

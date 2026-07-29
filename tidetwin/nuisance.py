@@ -265,13 +265,15 @@ class ConvergenceTrace:
     growth_ratio: float = 1.0
     robust: np.ndarray | None = None
     robust_drift: float = float("nan")
+    threshold: float = 0.05
 
     @property
     def verdict(self) -> str:
         if self.converged:
             return (
-                f"Converged: sigma moves by {self.relative_drift * 100:.1f} percent over the "
-                "last half of the run, within the 5 percent tolerance."
+                f"Converged: sigma moves by {self.relative_drift * 100:.1f} percent across the "
+                f"second half of the run, within the {self.threshold * 100:.1f} percent that "
+                "the estimator's own sampling error would produce anyway."
             )
         if self.heavy_tailed:
             return (
@@ -285,8 +287,9 @@ class ConvergenceTrace:
             )
         return (
             f"NOT converged: sigma is still moving by {self.relative_drift * 100:.1f} percent "
-            "over the last half of the run. Increase the sample count before relying on the "
-            "verdict."
+            f"across the second half of the run, against the {self.threshold * 100:.1f} percent "
+            "expected from sampling error alone. Increase the sample count before relying on "
+            "the verdict."
         )
 
 
@@ -759,7 +762,20 @@ def convergence_trace(
     rob = np.array([robust_scale(x[:n]) for n in ns])
     drift = _drift(sd)
     rob_drift = _drift(rob)
-    converged = bool(drift <= tolerance)
+
+    # Convergence has to be judged against the estimator's OWN sampling error,
+    # not a fixed percentage. The relative standard error of a sample standard
+    # deviation is 1/sqrt(2(n-1)), which at the start of the second half of a
+    # 400-sample run is already 5 percent. A flat 5 percent tolerance therefore
+    # demands precision below the noise floor and can essentially never be met -
+    # which is why runs kept reporting "not converged" no matter how long they
+    # ran. The test is now whether the observed drift is consistent with sampling
+    # noise, with an allowance for taking a maximum over several trace points,
+    # and a floor so that very long runs still have to be genuinely tight.
+    n_half = int(ns[len(ns) // 2]) if len(ns) > 1 else int(ns[-1])
+    expected = 2.5 / np.sqrt(2.0 * max(n_half - 1, 1))
+    threshold = float(max(tolerance, expected))
+    converged = bool(drift <= threshold)
 
     half = sd[len(sd) // 2 :]
     mid = half[0] if half.size else sd[-1]
@@ -774,8 +790,10 @@ def convergence_trace(
     # land in this particular sample. The final ratio is required to exceed 1.5
     # as well, purely to avoid labelling a run where the two measures agree.
     ratio = float(sd[-1] / rob[-1]) if rob[-1] > 0 and np.isfinite(rob[-1]) else float("inf")
-    heavy = bool(not converged and rob_drift <= tolerance and ratio > 1.5)
-    return ConvergenceTrace(ns, sd, converged, drift, heavy, growth, rob, rob_drift)
+    heavy = bool(not converged and rob_drift <= threshold and ratio > 1.5)
+    return ConvergenceTrace(
+        ns, sd, converged, drift, heavy, growth, rob, rob_drift, threshold
+    )
 
 
 def robust_scale(samples: np.ndarray) -> float:

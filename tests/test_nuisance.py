@@ -106,11 +106,22 @@ def test_convergence_trace_flags_a_still_settling_estimate():
     Must be reported as 'needs more samples', not as heavy tailed - the two call
     for opposite responses.
     """
-    tr = convergence_trace(np.random.default_rng(3).normal(size=60))
+    # A genuine regime shift: the scale trebles half way through, so sigma is
+    # still climbing at the end. Large n, so the sampling-noise threshold is
+    # small and the drift is unambiguous.
+    rng = np.random.default_rng(3)
+    x = np.concatenate([rng.normal(0, 1.0, 2000), rng.normal(0, 3.0, 2000)])
+    tr = convergence_trace(x)
     assert not tr.converged
-    assert not tr.heavy_tailed
+    assert not tr.heavy_tailed, "finite variance: more samples would settle it"
     assert "NOT converged" in tr.verdict
     assert "Increase the sample count" in tr.verdict
+
+    # A small clean sample IS converged, to the precision its size allows.
+    # Demanding better would be demanding precision below the noise floor.
+    small = convergence_trace(rng.normal(size=60))
+    assert small.converged
+    assert small.threshold > 0.2, "threshold must scale with the sampling error"
 
 
 def test_convergence_trace_handles_a_tiny_sample():
@@ -225,7 +236,8 @@ def test_the_two_failure_modes_get_opposite_treatment():
     from tidetwin.claims.registry import Artifacts, Status, evaluate_all
 
     settling = _result(joint_sd=0.3)
-    settling.joint_samples = np.random.default_rng(4).normal(size=60)
+    settling.joint_samples = np.concatenate([np.random.default_rng(4).normal(0, 1.0, 2000),
+                                       np.random.default_rng(5).normal(0, 3.0, 2000)])
     settling.convergence = convergence_trace(settling.joint_samples)
     # Preconditions: this fixture must genuinely be the "needs more samples" case.
     assert not settling.convergence.converged
@@ -250,7 +262,8 @@ def test_unconverged_run_withholds_the_verdict():
     from tidetwin.claims.registry import Artifacts, Status, evaluate_all
 
     res = _result(0.30)
-    res.joint_samples = np.random.default_rng(4).normal(size=60)
+    res.joint_samples = np.concatenate([np.random.default_rng(4).normal(0, 1.0, 2000),
+                                       np.random.default_rng(5).normal(0, 3.0, 2000)])
     res.convergence = convergence_trace(res.joint_samples)
     assert not res.convergence.converged and not res.convergence.heavy_tailed
     art = Artifacts(c3=res)

@@ -166,7 +166,11 @@ def test_empty_artifacts_still_produce_a_full_report():
     art = Artifacts()
     results = evaluate_all(art)
     _report_is_complete(results, art)
-    assert all(r.status.value.startswith("UNTESTABLE") for r in results)
+    # "Not run" is not a verdict. Reporting these as UNTESTABLE would claim the
+    # data to settle them is missing, which is a different and much stronger
+    # statement than "the analysis has not been run".
+    assert all(r.status is Status.NOT_RUN for r in results)
+    assert not any(r.status.is_verdict for r in results)
 
 
 @pytest.mark.parametrize("joint", [3, 5, 21, 23])
@@ -228,4 +232,36 @@ def test_full_run_completes_and_reports_everything():
     _report_is_complete(results, art)
     # C3 is the deciding test and must always carry a verdict.
     c3 = next(r for r in results if r.claim_id == "C3")
+    assert c3.status.is_verdict, "a full run must reach an actual verdict on C3"
     assert c3.status in (Status.PASS, Status.MARGINAL, Status.FAIL, Status.UNTESTABLE_DATA)
+
+
+def test_not_run_is_never_presented_as_a_verdict():
+    """The distinction that matters most to a reader of the ledger.
+
+    "We have not run this yet" and "the data needed to settle this does not
+    exist" are completely different statements. Conflating them made every claim
+    read as UNTESTABLE on arrival, which misrepresents the ledger.
+    """
+    art = Artifacts()
+    for r in evaluate_all(art):
+        assert r.status is Status.NOT_RUN
+        assert not r.status.is_verdict
+        assert "UNTESTABLE" not in r.status.value
+        assert "not been run" in r.detail
+
+    stamp = _stamp()
+    for doc in (to_markdown(results := evaluate_all(art), art, stamp),
+                to_html(results, art, stamp),
+                to_text(results, art, stamp)):
+        assert "NOT RUN YET" in doc
+        # A report of an unfinished analysis must say so up front.
+        assert "had not been computed" in doc
+
+
+def test_a_completed_claim_is_never_marked_not_run():
+    art = run_quick(AnalysisConfig(**FAST))
+    by_id = {r.claim_id: r for r in evaluate_all(art)}
+    # C1 and C7 are computed by the quick pass, so they must carry real verdicts.
+    assert by_id["C1"].status.is_verdict
+    assert by_id["C7"].status.is_verdict

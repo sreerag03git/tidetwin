@@ -63,6 +63,18 @@ def _summary_counts(results: list[ClaimResult]) -> dict[str, int]:
     return out
 
 
+def _pending_note(results: list[ClaimResult]) -> str:
+    """Say so, prominently, if the report describes an unfinished analysis."""
+    n = sum(r.status is Status.NOT_RUN for r in results)
+    if not n:
+        return ""
+    return (
+        f"**{n} of {len(results)} claims had not been computed when this report was "
+        "generated.** They are marked NOT RUN YET, which is not a verdict and must not be "
+        "read as one. Re-run the analysis for a complete ledger."
+    )
+
+
 def _headline(art: Artifacts, results: list[ClaimResult]) -> tuple[str, str]:
     """The C3 verdict, which leads every report regardless of tab or format."""
     c3 = next(r for r in results if r.claim_id == "C3")
@@ -88,6 +100,11 @@ def to_markdown(
         "Offshore Jackets: EnKF with Tidal Calibration Signal*."
     )
     a("")
+
+    pending = _pending_note(results)
+    if pending:
+        a(f"> {pending}")
+        a("")
 
     title, detail = _headline(art, results)
     a(f"## {title}")
@@ -211,6 +228,11 @@ def to_text(results: list[ClaimResult], art: Artifacts, stamp: Stamp) -> str:
     a("=" * 78)
     a("TIDETWIN CLAIMS REPORT")
     a("=" * 78)
+    pending = _pending_note(results)
+    if pending:
+        a("")
+        for line in _wrap(pending.replace("**", ""), 78):
+            a("  " + line)
     title, detail = _headline(art, results)
     a("")
     a(title.upper())
@@ -336,6 +358,11 @@ def to_html(
         "<em>Probabilistic Fatigue Digital Twin for Offshore Jackets: EnKF with Tidal "
         "Calibration Signal</em>.</p>"
     )
+
+    pending = _pending_note(results)
+    if pending:
+        a("<div class='verdict' style='border-left-color:#8a5300'><p>"
+          + _esc(pending.replace('**','')) + '</p></div>')
 
     a(f"<div class='verdict' style='border-left-color:{c3.status.colour}'>")
     a(f"<h2 style='color:{c3.status.colour}'>{_esc(title)}</h2>")
