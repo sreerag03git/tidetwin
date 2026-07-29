@@ -31,10 +31,17 @@ streamlit==1.58.0
 # The app probes the real capability at runtime and enables the buttons only when
 # it genuinely works.
 
-# Copernicus Climate Data Store client. Light; needed for the ERA5 metocean
-# channels (C3 wind/wave terms, C5 thermal). Without credentials the app shows
-# DATA UNAVAILABLE and the dependent claims report UNTESTABLE - DATA MISSING.
-cdsapi==0.7.7
+# NOTE: cdsapi is intentionally NOT pinned here, and was moved to
+# requirements-data.txt.
+#
+# It is only useful with Copernicus CDS credentials, which the deployed app does
+# not have, so on Streamlit Cloud it does nothing but add a package - and its
+# dependency tree - to the fresh pip install. A single failed or slow wheel in
+# that tree fails the whole install and takes the app down with an ImportError
+# that names none of the actual cause. era5.credentials_status() already catches
+# a missing cdsapi and reports "not installed", so removing it changes nothing a
+# credential-less deployment could do anyway. Install it locally, alongside real
+# CDS credentials, via requirements-data.txt.
 
 # NOTE: pyTMD is intentionally NOT pinned here. It pulls netCDF4 and a large
 # dependency tree, and it is useless without a TPXO9-atlas or FES2014 model
