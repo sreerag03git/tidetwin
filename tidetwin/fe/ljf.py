@@ -31,8 +31,22 @@ every result that depends on it.
     :func:`load_tabulated` for the schema) and this formulation activates; until
     then it reports DATA UNAVAILABLE.
 
-The distinction matters for the claims ledger: C1, C2, C3 and C7 all move when
-the formulation changes, so the app exposes the choice and reports the spread.
+How much the choice matters, measured rather than asserted
+----------------------------------------------------------
+:mod:`tidetwin.robustness` sweeps the formulation and the shell model's
+load-spreading length and reports the spread on the Structure tab. The result is
+not what this docstring used to claim.
+
+* **C1 barely moves.** The intact strain ratio spans about 0.8 percent between
+  the rigid idealisation and the shell model with its spreading length halved or
+  doubled. The ratio is a global load-path quantity and is nearly insensitive to
+  local joint compliance, which makes C1 a more robust number than expected.
+* **C2 and C7 depend on it entirely.** Both are identically zero under RIGID,
+  because there is no joint compliance for a crack to change. For those two the
+  formulation is not a refinement, it is the whole mechanism.
+
+The earlier wording here said all four claims move with the formulation. That
+was an assumption, and measuring it showed it was wrong for C1.
 """
 
 from __future__ import annotations
@@ -171,7 +185,7 @@ class LJFStiffness:
         )
 
 
-def shell_ljf(g: JointGeometry) -> LJFStiffness:
+def shell_ljf(g: JointGeometry, spread_factor: float = 1.0) -> LJFStiffness:
     """Chord-wall local flexibility from cylindrical shell theory.
 
     Derivation, in full, because the idealisation is where the modelling error
@@ -197,9 +211,12 @@ def shell_ljf(g: JointGeometry) -> LJFStiffness:
 
        i.e. the brace footprint width plus one shell attenuation length each
        side, capped at the full circumference. **This spreading length is the
-       principal idealisation.** It is not a fitted constant, but it is a choice;
-       halving or doubling it moves the axial LJF by roughly the same factor, and
-       the app exposes that sensitivity rather than hiding it.
+       principal idealisation.** It is not a fitted constant, but it is a choice,
+       so it is exposed as ``spread_factor`` rather than buried. Halving or
+       doubling it changes the axial joint stiffness by about 12 and 22 percent
+       respectively, and moves the intact strain ratio by well under 1 percent -
+       measured by :func:`tidetwin.robustness.ljf_sensitivity` and shown on the
+       Structure tab.
 
     3. Axial stiffness follows as :math:`k_{ax} = P/w = 8 \\beta_s^3 D_s c_{eff} /
        \\sin^2(theta)`, the second ``sin`` factor converting the radial
@@ -225,7 +242,12 @@ def shell_ljf(g: JointGeometry) -> LJFStiffness:
     Ds = E * T**3 / (12.0 * (1.0 - nu**2))
     beta_s = (3.0 * (1.0 - nu**2) / (R**2 * T**2)) ** 0.25
     atten = 1.0 / beta_s
-    c_eff = min(g.brace_d + 2.0 * atten, 2.0 * np.pi * R)
+    # spread_factor scales the attenuation-length allowance. It is the one free
+    # choice in this derivation, so it is a parameter rather than a buried
+    # constant: tidetwin.robustness.ljf_sensitivity sweeps it and reports how far
+    # the dependent claims move, which is the only honest way to present an
+    # idealisation that cannot be derived.
+    c_eff = min(g.brace_d + 2.0 * spread_factor * atten, 2.0 * np.pi * R)
 
     # Radial stiffness of the loaded patch, N/m of radial deflection.
     k_radial = 8.0 * beta_s**3 * Ds * c_eff
@@ -243,8 +265,9 @@ def shell_ljf(g: JointGeometry) -> LJFStiffness:
         k_opb=float(k_opb),
         model=LJFModel.SHELL,
         note=(
-            f"shell BOEF; attenuation length {atten:.3f} m, effective loaded arc "
-            f"{c_eff:.3f} m ({c_eff / (2 * np.pi * R) * 100:.0f}% of circumference)"
+            f"shell BOEF; attenuation length {atten:.3f} m, spread factor "
+            f"{spread_factor:g}, effective loaded arc {c_eff:.3f} m "
+            f"({c_eff / (2 * np.pi * R) * 100:.0f}% of circumference)"
         ),
     )
 
@@ -332,6 +355,7 @@ def joint_stiffness(
     g: JointGeometry,
     model: LJFModel = LJFModel.RIGID,
     tabulated_name: str = "buitrago1993",
+    spread_factor: float = 1.0,
     extra_axial_compliance: float = 0.0,
     extra_ipb_compliance: float = 0.0,
     extra_opb_compliance: float = 0.0,
@@ -346,7 +370,7 @@ def joint_stiffness(
     if model is LJFModel.RIGID:
         base = LJFStiffness(np.inf, np.inf, np.inf, LJFModel.RIGID, "rigid frame idealisation")
     elif model is LJFModel.SHELL:
-        base = shell_ljf(g)
+        base = shell_ljf(g, spread_factor)
     elif model is LJFModel.TABULATED:
         base = _tabulated_ljf(g, tabulated_name)
     else:  # pragma: no cover - enum is closed

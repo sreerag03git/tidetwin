@@ -316,6 +316,7 @@ def build_jacket(
     crack_compliance: dict[int, tuple[float, float, float]] | None = None,
     foundation_stiffness: float | None = None,
     tables: JacketTables | None = None,
+    ljf_spread_factor: float = 1.0,
 ) -> JacketBuild:
     """Assemble the OC4 jacket.
 
@@ -392,6 +393,7 @@ def build_jacket(
                 st = joint_stiffness(
                     geom,
                     ljf_model,
+                    spread_factor=ljf_spread_factor,
                     extra_axial_compliance=extra[0],
                     extra_ipb_compliance=extra[1],
                     extra_opb_compliance=extra[2],
