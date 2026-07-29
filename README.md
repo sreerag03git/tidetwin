@@ -24,32 +24,37 @@ number that looks like a result.
 | **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 1.64 MUSD (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
 | **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
 
-<sub>TideTwin 0.1.0 - commit `a9049a6` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-28T18:47:45Z</sub>
+<sub>TideTwin 0.1.0 - commit `61cf335` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-29T02:51:16Z</sub>
 <!-- CLAIMS-LEDGER:END -->
 
 **The headline finding is C3.** Under the eight nuisance channels the brief
 specifies — rotary tidal current direction, spring/neap range, wind-driven
 residual current, water level, twenty years of marine growth, wave-induced
-offset, scour-driven foundation softening and differential FBG drift — the
-standard deviation of the intact strain ratio comes out at **13.7 % of the
-ratio**, against a claimed damage signature of 11.1 %. That is 1.24× the signal,
-against a one-third limit.
+offset, scour-driven foundation softening and differential FBG drift — and under
+**real measured tidal forcing** at the shipped default station, the standard
+deviation of the intact strain ratio comes out at **8.2 % of the ratio**, against
+a claimed damage signature of 11.1 %. That is 0.74× the signal, against a
+one-third limit — so it misses by a factor of 2.2.
 
-Four things make that a decision rather than a number:
+That default is the *most favourable* of the seven regimes tested. The others run
+to 39.6 %.
 
-- **It is converged.** σ moves by 4.1 % across the second half of the run, inside
+Four things make it a decision rather than a number:
+
+- **It is converged.** σ moves by 2.5 % across the second half of the run, inside
   the 5 % tolerance. An unconverged Monte Carlo has decided nothing, and the app
-  withholds the verdict when it detects one.
+  withholds the verdict when it detects one — this station needed 900 samples,
+  and at 250 the verdict was correctly withheld.
 - **It does not depend on our crack model.** The verdict is computed against the
   paper's *own* claimed 11.1 % signature as well as against the one this app
   computes, and fails both. The first comparison involves no modelling choice
   made here.
 - **It is not an artefact of the assumed range widths.** Every nuisance range
-  would have to shrink to **0.31× its assumed width, simultaneously on all eight
-  channels**, for C3 to pass — a sea roughly three times quieter than assumed, on
-  every axis at once.
+  would have to shrink to **0.45× its assumed width, simultaneously on all eight
+  channels**, for C3 to pass — a sea more than twice as quiet as assumed, on every
+  axis at once.
 - **The channels partially cancel, and it still fails.** The joint variance comes
-  out 73 % *below* the sum of the individual ones: the ratio normalisation
+  out 33 % *below* the sum of the individual ones: the ratio normalisation
   genuinely does reject a large part of what each channel does alone. That is a
   point in the method's favour, and the margin is still not there.
 
@@ -66,25 +71,28 @@ water-level amplitudes *and* tidal current ellipses — spanning semidiurnal to
 mixed-diurnal regimes, rectilinear to strongly rotary currents, and nearly an
 order of magnitude in current amplitude:
 
-| Tide | M2 current | Ellipse ecc. | Form factor | σ, % of ratio | σ / claimed | Verdict |
-|---|---|---|---|---|---|---|
-| Placeholder *(not real)* | 0.250 | 0.320 | 0.571 | 14.2 | 1.28 | FAIL |
-| Mayport, FL | 0.584 | 0.299 | 0.184 | 8.6 | 0.77 | FAIL |
-| Friday Harbor, WA | 0.381 | 0.178 | 1.733 | 21.0 | 1.89 | FAIL |
-| Boston, MA | 0.100 | 0.098 | 0.164 | 28.1 | 2.53 | FAIL |
-| Kings Bay, GA | 0.564 | 0.078 | 0.174 | 28.1 | 2.54 | FAIL |
-| Woods Hole, MA | 0.496 | 0.051 | 0.458 | 36.7 | 3.30 | FAIL |
-| Richmond, CA | 0.526 | 0.055 | 0.792 | 41.1 | 3.70 | FAIL |
+| Tide | M2 current | Ellipse ecc. | Form factor | Dispersion, % of ratio | ÷ claimed | Break-even | Verdict |
+|---|---|---|---|---|---|---|---|
+| Placeholder *(not real)* | 0.250 | 0.320 | 0.571 | 13.7 | 1.23 | 0.32× | FAIL |
+| Mayport, FL | 0.584 | 0.299 | 0.184 | 8.0 | 0.72 | 0.47× | FAIL |
+| Woods Hole, MA † | 0.496 | 0.051 | 0.458 | 15.0 | 1.35 | 0.24× | FAIL |
+| Friday Harbor, WA | 0.381 | 0.178 | 1.733 | 17.4 | 1.57 | 0.22× | FAIL |
+| Boston, MA | 0.100 | 0.098 | 0.164 | 27.3 | 2.46 | 0.18× | FAIL |
+| Kings Bay, GA | 0.564 | 0.078 | 0.174 | 27.5 | 2.47 | 0.13× | FAIL |
+| Richmond, CA | 0.526 | 0.055 | 0.792 | 39.6 | 3.57 | never | FAIL |
 
-Every real regime fails, by between 2.3× and 11× the limit. The placeholder was
+† variance undefined; robust scale used. Every other row is a standard deviation.
+
+Every real regime fails, by between 2.2× and 11× the limit. The placeholder was
 if anything *generous* — it sits in the lower half of the real range rather than
-stacking the deck.
+stacking the deck. Reproduce with
+`python scripts/settle_c3.py --samples 700`.
 
 **The mechanism, which is the useful part.** Nuisance dispersion tracks the
-*shape* of the tidal ellipse almost perfectly (r ≈ **−0.9** against eccentricity)
-and is essentially independent of its *size* (r ≈ 0 against current amplitude). A
+*shape* of the tidal ellipse (r = **−0.70** against eccentricity) and is
+essentially independent of its *size* (r = −0.17 against current amplitude). A
 rotary current never goes slack, so the strain ratio stays well conditioned; a
-reversing current passes through zero twice a cycle and the ratio blows up near
+reversing current passes through zero twice a cycle and the ratio degrades near
 slack water. The method is not signal-starved — it is ill-conditioned.
 
 **At a reversing-current site the statistic has no variance at all.** The ratio's
@@ -92,23 +100,25 @@ denominator is the upper gauge's M2 amplitude, which approaches zero at slack
 water, and a ratio with a near-zero denominator is Cauchy-like. The sample
 standard deviation then *grows* with sample count instead of converging — it went
 38.7% → 53.4% between 700 and 2800 samples at Woods Hole and was still climbing.
-The app detects this by comparing σ against a robust scale:
 
-| Site | M2 ellipse ecc. | σ / robust scale | Statistic |
-|---|---|---|---|
-| Mayport, FL | 0.299 (rotary) | **1.02** | well behaved, σ valid |
-| Woods Hole, MA | 0.051 (reversing) | **5.00** | Cauchy-like, **variance undefined** |
+The app detects this from the fact that a **robust scale converges while σ does
+not**: a robust scale converges for any distribution with a density, the standard
+deviation only if the variance exists. Where the variance does not exist, C3 is
+decided on 0.7413 × IQR rather than withheld, because more samples cannot fix a
+statistic that has no variance. Woods Hole still fails, at 15.0% against the
+claimed 11.1%.
 
-Where the variance does not exist, C3 is decided on a robust scale
-(0.7413 × IQR) rather than withheld — more samples cannot fix a statistic that
-has no variance. Woods Hole still fails, at 15.9% against the claimed 11.1%.
+So eccentricity predicts two things, and the second matters more than the first:
+the *level* of the nuisance floor, and whether the statistic is well posed at all.
+The two most reversing sites are where σ/robust is largest (2.8 at Woods Hole
+against 1.0–1.3 elsewhere), which is where the variance breaks down.
 
-That a detection statistic's variance does not exist at an ordinary offshore site
-is a finding against the method in its own right: a detection threshold cannot be
-set from a quantity that has no second moment.
+That a detection statistic has no second moment at an ordinary offshore site is a
+finding against the method in its own right: a detection threshold cannot be set
+from a quantity that has no variance.
 
 Actionable version: if this method is deployed anywhere, it wants a strongly
-rotary tidal current. And at the most rotary site tested it still misses by 2.3×.
+rotary tidal current. And at the most rotary site tested it still misses by 2.2×.
 
 The platform site itself still needs a TPXO or FES extraction — both are
 registered downloads and are not shipped. But the evidence says that extraction

@@ -133,9 +133,9 @@ def main() -> int:
         verdicts = {r[3] for r in measured}
         unconverged = [r[0] for r in measured if not r[4]]
         print(f"Across {len(measured)} real tidal regimes:")
-        print(f"  nuisance sigma  {cvs.min() * 100:.2f} to {cvs.max() * 100:.2f} percent "
+        print(f"  nuisance dispersion  {cvs.min() * 100:.2f} to {cvs.max() * 100:.2f} percent "
               f"of the intact ratio (claimed damage signature {CLAIMED * 100:.1f} percent)")
-        print(f"  sigma / claimed signature  {cvs.min() / CLAIMED:.2f} to "
+        print(f"  dispersion / claimed signature  {cvs.min() / CLAIMED:.2f} to "
               f"{cvs.max() / CLAIMED:.2f}  (limit 0.33)")
         print(f"  verdicts: {', '.join(sorted(verdicts))}")
 
@@ -143,13 +143,17 @@ def main() -> int:
         eccs = np.array([r[6] for r in measured])
         majors = np.array([r[5] for r in measured])
         if len(measured) >= 3:
-            print(f"  correlation of sigma with ellipse eccentricity  "
+            print(f"  correlation of dispersion with ellipse eccentricity  "
                   f"r = {np.corrcoef(eccs, cvs)[0, 1]:+.3f}")
-            print(f"  correlation of sigma with current amplitude     "
+            print(f"  correlation of dispersion with current amplitude     "
                   f"r = {np.corrcoef(majors, cvs)[0, 1]:+.3f}")
             print("  -> the nuisance floor is set by the SHAPE of the tidal ellipse, not its")
             print("     size. A rotary current never goes slack and keeps the ratio well")
-            print("     conditioned; a reversing one passes through zero and the ratio blows up.")
+            print("     conditioned; a reversing one passes through zero near slack water.")
+            if heavy:
+                print("     Note the correlation understates the effect: at the reversing sites")
+                print("     the robust scale is used, which by construction ignores the tail")
+                print("     blow-up that is the actual failure there.")
 
         if verdicts != {"FAIL"}:
             print(
