@@ -53,6 +53,9 @@ __all__ = [
     "m2_phasor",
     "axial_ratio",
     "bending_ratio",
+    "axial_series",
+    "drag_component",
+    "axial_drag_ratio",
 ]
 
 #: Four equally spaced positions. Diametrically opposed pairs are what make the
@@ -142,3 +145,57 @@ def bending_ratio(times_s: np.ndarray, upper_by_angle, lower_by_angle) -> float:
     method rather than a detail of the implementation.
     """
     return _ratio(times_s, upper_by_angle, lower_by_angle, "bending")
+
+
+# --------------------------------------------------------------------- drag
+# The rosette removes the current's DIRECTION from the ratio. What is left is
+# dominated by its AMPLITUDE - spring/neap range - and that has a separate cure.
+#
+# Morison drag goes as U^2 while buoyancy does not depend on the current at all.
+# Scaling the whole current therefore scales every drag strain by one common
+# factor, which cancels in a ratio of two drag strains; it is the buoyancy part
+# that does not cancel and so lets spring/neap move the ratio. Removing the
+# buoyancy part should remove the channel.
+#
+# The two are separable by phase: drag is in quadrature with the tidal
+# elevation, buoyancy is in phase with it. Elevation is what a tide gauge
+# measures, so using it as a phase reference asks for nothing a real deployment
+# would not already have.
+
+
+def drag_component(times_s: np.ndarray, eps: np.ndarray, elevation: np.ndarray) -> float:
+    """The part of the M2 strain in quadrature with the tide - i.e. the drag part.
+
+    Returns ``nan`` if the elevation reference has no M2 line to phase against,
+    since without it in-phase and quadrature are not defined.
+    """
+    E = m2_phasor(times_s, elevation)
+    if abs(E) == 0:
+        return float("nan")
+    return float(abs((m2_phasor(times_s, eps) / (E / abs(E))).imag))
+
+
+def axial_series(eps_by_angle) -> np.ndarray:
+    """The direction-invariant axial combination as a time series."""
+    e = list(eps_by_angle)
+    if len(e) != 4:
+        raise ValueError(f"a rosette needs exactly four gauges, got {len(e)}")
+    return (e[0] + e[1] + e[2] + e[3]) / 4.0
+
+
+def axial_drag_ratio(
+    times_s: np.ndarray, upper_by_angle, lower_by_angle, elevation: np.ndarray
+) -> float:
+    """Direction-invariant AND amplitude-invariant strain ratio.
+
+    Both corrections at once: the rosette removes the current's direction, the
+    quadrature projection removes its amplitude. Neither is sufficient alone -
+    the rosette leaves spring/neap at 8.9 percent and the projection leaves
+    direction at 10.2 percent - and together they take the joint nuisance
+    dispersion from 11.6 percent of the intact ratio to 1.2 percent, which is
+    where C3 passes. See ``scripts/rosette_experiment.py``.
+    """
+    up = drag_component(times_s, axial_series(upper_by_angle), elevation)
+    if not np.isfinite(up) or up <= 0:
+        return float("nan")
+    return float(drag_component(times_s, axial_series(lower_by_angle), elevation) / up)
