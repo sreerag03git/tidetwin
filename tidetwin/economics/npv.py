@@ -49,6 +49,11 @@ class EconomicInputs:
     avoided_campaigns_per_year: float = 0.25
     avoided_campaign_cost: float = 2_000_000.0
     avoided_campaign_cost_cv: float = 0.35
+    #: Fleet size. Every other figure here is per jacket, but the abstract's
+    #: headline is for a fleet ("For 30 ADNOC jackets ... $19.9 million net"),
+    #: so a per-jacket NPV compared against it directly is off by this factor.
+    #: The default is the paper's own number. ASSUMED, like everything here.
+    n_jackets: int = 30
     discount_rate: float = 0.09
     discount_rate_sd: float = 0.02
     horizon_years: int = 20
@@ -94,6 +99,18 @@ class NPVResult:
 
     def percentile(self, q: float) -> float:
         return float(np.percentile(self.samples, q))
+
+    @property
+    def fleet_mean(self) -> float:
+        """Expected NPV across the whole fleet.
+
+        Linear in the fleet size: no shared interrogator, no shared spares
+        holding, no mobilisation spread over several platforms in one campaign.
+        Every one of those would raise the per-jacket NPV, so this scaling is the
+        conservative direction and understates the fleet case rather than
+        flattering it.
+        """
+        return self.mean * self.inputs.n_jackets
 
     @property
     def probability_positive(self) -> float:

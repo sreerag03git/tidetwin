@@ -21,7 +21,7 @@ number that looks like a result.
 | **C5** During neap tides a differential thermal channel of 5 to 15 microstrain provides a usab... | 5-15 microstrain | aliasing resolved; amplitude n/a | **UNTESTABLE - DATA MISSING** |
 | **C6** The log-transformed EnKF converges on remaining life to within +/-0.9 years, outperform... | +/-0.9 years | coverage 100 % | **MARGINAL** |
 | **C7** The same damage produces a natural frequency shift below 0.5 percent, so modal methods ... | < 0.5 percent | 0.0008 % | **PASS** |
-| **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 1.64 MUSD (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
+| **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 49.3 MUSD over 30 jackets (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
 | **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
 
 <sub>TideTwin 0.1.0 - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter.</sub>

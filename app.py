@@ -1308,13 +1308,25 @@ with TABS[6]:
             with cols[3]:
                 quantity(assumed(r8.probability_positive, "-", "probability NPV > 0"))
 
+            # The distribution is per jacket; the abstract's 19.9 MUSD is for a
+            # fleet of 30. Drawing the fleet figure on a per-jacket axis made the
+            # claim look about thirty times more ambitious than it is.
+            n_j = r8.inputs.n_jackets
             fig = go.Figure(go.Histogram(x=r8.samples / 1e6, nbinsx=80, marker_color="#35b6c4"))
             fig.add_vline(x=0, line_color="#d1495b")
-            fig.add_vline(x=19.9, line_dash="dash", line_color="#c8871b",
-                          annotation_text="claimed 19.9 MUSD")
-            fig.update_layout(title="NPV distribution", xaxis_title="NPV, million USD",
+            fig.add_vline(x=19.9 / n_j, line_dash="dash", line_color="#c8871b",
+                          annotation_text=f"claimed 19.9 MUSD / {n_j} jackets "
+                                          f"= {19.9 / n_j:.2f} each")
+            fig.update_layout(title="NPV distribution, per jacket",
+                              xaxis_title="NPV, million USD",
                               yaxis_title="count", hovermode="x")
             figure_block(fig, "c8_npv")
+            st.caption(
+                f"Per jacket. The abstract's headline is a fleet figure - 19.9 MUSD across "
+                f"{n_j} ADNOC jackets - so it is divided by {n_j} to sit on this axis. "
+                f"Across the fleet this model gives {r8.fleet_mean / 1e6:.1f} MUSD. The "
+                "commercial case is not where the paper is aggressive."
+            )
 
             with st.spinner("tornado sensitivity..."):
                 t8 = tornado(cfg.economics, n_samples=2000, seed=cfg.seed)[:10]
