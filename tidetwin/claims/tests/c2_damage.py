@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from ...damage.crack_ljf import CrackGeometry, crack_compliance, shell_fe_status
-from ...fe.ljf import LJFModel, shell_ljf
+from ...fe.ljf import LJFModel, LJFStiffness, shell_ljf
 from ...geometry.oc4 import SensorPair, brace_chord_joints, build_jacket, load_tables
 from ...loads.morison import HydroConfig
 from ...loads.tides import TidalConstituents
@@ -223,6 +223,8 @@ class StiffnessReductionResult:
     joint_id: int
     brace_member: int
     springs: dict[str, float]
+    #: Which joint flexibility the reductions are taken against.
+    baseline_label: str = "as modelled"
 
     def change(self, mode: str) -> np.ndarray:
         """Signed fractional ratio change against reduction, for one mode set."""
@@ -375,12 +377,26 @@ def stiffness_reduction_test(
     n_theta: int = 12,
     claimed_intact: float = 1.800,
     claimed_damaged: float = 2.000,
+    baseline_springs: LJFStiffness | None = None,
+    baseline_label: str = "as modelled",
 ) -> StiffnessReductionResult:
     """Sweep the joint stiffness reduction and record the strain ratio.
 
     ``reductions`` are fractions of the intact joint stiffness removed, 0 to 1.
     A value of 1 removes the joint spring completely, which bounds what any crack
     could possibly do.
+
+    ``baseline_springs`` answers the obvious objection to this whole test - that
+    it was run on the wrong joint. The abstract's K-joint (762 mm chord, 25 mm
+    wall, 45 degree brace) is *softer* than any joint on the OC4 frame, by four
+    to eight times in out-of-plane bending, and a softer joint carries more of
+    the load path locally. Passing the paper's own springs here pre-softens the
+    instrumented joint to them and takes the reductions relative to that, so the
+    claim can be tested at the flexibility the paper itself specifies.
+
+    Only softening is possible: added compliance in series cannot stiffen a
+    spring. A target stiffer than the modelled joint raises ``ValueError`` rather
+    than silently doing nothing.
     """
     if ljf_model is LJFModel.RIGID:
         raise ValueError(
@@ -399,21 +415,36 @@ def stiffness_reduction_test(
     )
     t = np.arange(0.0, record_days * 86400.0, 1800.0)
 
-    k = shell_ljf(_joint_geometry(tables, brace_member, joint_id))
+    modelled = shell_ljf(_joint_geometry(tables, brace_member, joint_id))
+    k = baseline_springs if baseline_springs is not None else modelled
+
+    # Compliance needed to bring the modelled joint down to the target baseline.
+    # Zero when no baseline is given, so the ordinary path is unaffected.
+    _MODE_ATTRS = (("axial", "k_axial"), ("ipb", "k_ipb"), ("opb", "k_opb"))
+    offset = {}
+    for name, attr in _MODE_ATTRS:
+        k_model, k_target = getattr(modelled, attr), getattr(k, attr)
+        if k_target > k_model * (1.0 + 1e-9):
+            raise ValueError(
+                f"cannot raise the {name} joint stiffness from {k_model:.4g} to "
+                f"{k_target:.4g}: a compliance added in series can only soften a spring. "
+                "Pass a baseline no stiffer than the modelled joint."
+            )
+        offset[name] = max(1.0 / k_target - 1.0 / k_model, 0.0)
 
     def ratio_for(reduction: float, ms: ModeSet) -> float:
         # Compliance in series: removing a fraction f of the stiffness means the
         # remaining stiffness is (1-f)k, i.e. an added compliance of f/((1-f)k).
-        if reduction <= 0.0:
-            extra = None
-        else:
-            f = min(reduction, 0.999)
-            soften = lambda kk: f / ((1.0 - f) * kk)  # noqa: E731
-            extra = {brace_member: (
-                soften(k.k_axial) if ms.axial else 0.0,
-                soften(k.k_ipb) if ms.ipb else 0.0,
-                soften(k.k_opb) if ms.opb else 0.0,
-            )}
+        # The reduction is taken against the baseline k, on top of any offset
+        # that moved the joint to that baseline in the first place.
+        f = min(reduction, 0.999) if reduction > 0.0 else 0.0
+        soften = lambda kk: f / ((1.0 - f) * kk) if f else 0.0  # noqa: E731
+        parts = (
+            offset["axial"] + (soften(k.k_axial) if ms.axial else 0.0),
+            offset["ipb"] + (soften(k.k_ipb) if ms.ipb else 0.0),
+            offset["opb"] + (soften(k.k_opb) if ms.opb else 0.0),
+        )
+        extra = {brace_member: parts} if any(p > 0.0 for p in parts) else None
         b = build_jacket(ljf_model=ljf_model, crack_compliance=extra, tables=tables)
         s = build_response_surface(b, pair, cfg, n_theta=n_theta,
                                    eta_levels=np.linspace(-2, 2, 3))
@@ -437,6 +468,7 @@ def stiffness_reduction_test(
         joint_id=joint_id,
         brace_member=int(brace_member),
         springs={"axial": float(k.k_axial), "ipb": float(k.k_ipb), "opb": float(k.k_opb)},
+        baseline_label=baseline_label,
     )
 
 

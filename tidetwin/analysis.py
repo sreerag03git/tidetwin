@@ -26,6 +26,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from .abstract import LOWER_ZAKUM_JOINT
 from .claims.registry import Artifacts
 from .claims.tests.c1_ratio import intact_ratio
 from .claims.tests.c2_damage import (
@@ -40,7 +41,7 @@ from .damage.crack_ljf import shell_fe_status
 from .damage.paris import paris_status
 from .damage.sn import sn_status
 from .economics.npv import EconomicInputs, monte_carlo_npv
-from .fe.ljf import LJFModel
+from .fe.ljf import LJFModel, shell_ljf
 from .geometry.oc4 import (
     WATER_DEPTH,
     brace_chord_joints,
@@ -452,6 +453,23 @@ def run_full(cfg: AnalysisConfig, progress=None) -> Artifacts:
             lambda: stiffness_reduction_test(
                 pair, constituents, hydro, cfg.joint_id, braces[0],
                 ljf_model=cfg.ljf_model, n_theta=max(8, cfg.n_theta // 2),
+            ),
+        )
+
+        # The obvious objection to the above is that it was run on the wrong
+        # joint. The abstract's K-joint is softer than any joint on this frame -
+        # four to eight times in out-of-plane bending - and a softer joint takes
+        # a larger share of the local load path, so it could plausibly be more
+        # sensitive. Repeating the sweep with the instrumented joint softened to
+        # the paper's own flexibility settles it rather than arguing about it.
+        art.c2_stiffness_paper = _guard(
+            art,
+            "C2",
+            lambda: stiffness_reduction_test(
+                pair, constituents, hydro, cfg.joint_id, braces[0],
+                ljf_model=cfg.ljf_model, n_theta=max(8, cfg.n_theta // 2),
+                baseline_springs=shell_ljf(LOWER_ZAKUM_JOINT),
+                baseline_label="softened to the abstract's Lower Zakum K-joint",
             ),
         )
 

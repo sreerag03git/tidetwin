@@ -23,7 +23,11 @@ from tidetwin.damage.newman_raju import (
     shape_factor_Q,
     sif,
 )
-from tidetwin.claims.tests.c2_damage import MODE_SETS, StiffnessReductionResult
+from tidetwin.claims.tests.c2_damage import (
+    MODE_SETS,
+    StiffnessReductionResult,
+    stiffness_reduction_test,
+)
 from tidetwin.damage.paris import load_constants, paris_status
 from tidetwin.damage.sn import load_curve, sn_status
 from tidetwin.provenance import DataUnavailable
@@ -255,3 +259,20 @@ def test_the_verdict_quotes_the_shortfall_as_a_factor():
     r = _result(opb=[0.0, 0.00370, 0.027, 0.122])
     # 0.111 / 0.0037 = 30
     assert "factor of 30" in r.verdict
+
+
+def test_softening_to_a_target_joint_cannot_silently_stiffen_it():
+    """A compliance added in series can only soften. Asking to stiffen must fail.
+
+    Silently ignoring an impossible target would report the C2 result as if it
+    had been evaluated at the paper's joint when it had not.
+    """
+    from tidetwin.fe.ljf import LJFModel as _M
+    from tidetwin.fe.ljf import LJFStiffness
+
+    rigid_ish = LJFStiffness(k_axial=1e30, k_ipb=1e30, k_opb=1e30, model=_M.SHELL)
+    with pytest.raises(ValueError, match="can only soften"):
+        stiffness_reduction_test(
+            pair=None, constituents=None, cfg=None, joint_id=5,
+            baseline_springs=rigid_ish,
+        )
