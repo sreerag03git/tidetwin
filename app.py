@@ -164,10 +164,59 @@ def tide_inputs(s) -> tuple[dict | None, str]:
         return table, source
 
 
+def run_control(container, key, *, prominent: bool) -> None:
+    """The Run button, and an honest statement of whether it is needed.
+
+    Moving a slider deliberately does not recompute - a Monte Carlo over nine
+    claims takes about a minute, and firing it on every drag would make the app
+    unusable. But that decision only works if the user can see it: without a
+    visible "your inputs are ahead of these figures" signal and a button right
+    next to it, changing an input looks exactly like a control that does
+    nothing. This renders both, at the top of the sidebar where the inputs are,
+    as well as beside the headline numbers.
+    """
+    ran = st.session_state.get("full") is not None
+    stale = ran and st.session_state.get("full_key") != key
+    if not ran:
+        label, kind = "Run the analysis", "primary"
+    elif stale:
+        label, kind = "Re-run with the new inputs", "primary"
+        container.warning(
+            "**Inputs changed.** The figures on the page are still from the previous "
+            "run. Press below to recompute them.",
+            icon=":material/sync_problem:",
+        )
+    else:
+        label, kind = "Re-run analysis", "secondary"
+        if prominent:
+            container.success("Figures are up to date with these inputs.",
+                              icon=":material/check_circle:")
+    if container.button(label, type=kind, width="stretch",
+                        key=f"run_{'side' if prominent else 'top'}"):
+        bar = container.progress(0.0, "starting")
+        try:
+            st.session_state.full = run_full(
+                _cfg_from_key(key), lambda f, m: bar.progress(min(f, 1.0), m)
+            )
+            st.session_state.full_key = key
+        finally:
+            bar.empty()
+        st.rerun()
+    if prominent:
+        container.caption(
+            "Takes about a minute: nine claims, a Monte Carlo over eight nuisance "
+            "channels, and a few hundred frame solves. Nothing recomputes while you "
+            "are still adjusting inputs."
+        )
+
+
 def sidebar() -> AnalysisConfig:
     s = st.sidebar
     s.markdown("### TideTwin")
     s.caption("Every red chip is an assumption. Results inherit them.")
+    #: Filled in after the config is built, since the staleness check needs its key.
+    st.session_state["_run_slot"] = s.container()
+    s.divider()
 
     s.markdown("**Platform**")
     lat = s.number_input("Latitude, deg N", -90.0, 90.0, 24.9, 0.1, format="%.4f")
@@ -517,18 +566,12 @@ _pending = sum(r.status is Status.NOT_RUN for r in results)
 if _pending:
     top[2].caption(f"{_pending} more awaiting analysis")
 with top[3]:
-    stale = st.session_state.full is not None and st.session_state.full_key != key
-    label = "Re-run with current inputs" if stale else "Re-run analysis"
-    if st.button(label, type="primary" if stale else "secondary", width="stretch"):
-        bar = st.progress(0.0, "starting")
-        try:
-            st.session_state.full = run_full(cfg, lambda f, m: bar.progress(min(f, 1.0), m))
-            st.session_state.full_key = key
-        finally:
-            bar.empty()
-        st.rerun()
-    if stale:
-        st.caption("Inputs changed since the last run. Figures below are from the previous one.")
+    run_control(st.container(), key, prominent=False)
+
+# The same control at the top of the sidebar, next to the inputs it applies to.
+# The slot was reserved before the widgets were drawn, so it appears above them
+# rather than below sixty of them where nobody would find it.
+run_control(st.session_state["_run_slot"], key, prominent=True)
 
 if art.c3 is None:
     st.info(

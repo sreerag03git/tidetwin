@@ -468,6 +468,15 @@ def run_full(cfg: AnalysisConfig, progress=None) -> Artifacts:
             lambda: stiffness_reduction_test(
                 pair, constituents, hydro, cfg.joint_id, braces[0],
                 ljf_model=cfg.ljf_model, n_theta=max(8, cfg.n_theta // 2),
+                # Only the points this comparison actually reports. The full
+                # nine-point curve is drawn for the joint being analysed; this
+                # one exists to answer a single question - does the paper's own
+                # joint change the answer at its own stated 10 percent - and
+                # sweeping it at full resolution cost 24 seconds of every run to
+                # produce a curve nothing displayed. The high points are kept so
+                # required_reduction_for_claim stays meaningful rather than
+                # silently reporting "never reached" from a truncated sweep.
+                reductions=np.array([0.0, 0.10, 0.50, 0.99]),
                 baseline_springs=shell_ljf(LOWER_ZAKUM_JOINT),
                 baseline_label="softened to the abstract's Lower Zakum K-joint",
             ),
