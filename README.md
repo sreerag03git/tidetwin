@@ -80,16 +80,35 @@ Every real regime fails, by between 2.3× and 11× the limit. The placeholder wa
 if anything *generous* — it sits in the lower half of the real range rather than
 stacking the deck.
 
-**The mechanism, which is the useful part.** Nuisance σ tracks the *shape* of the
-tidal ellipse almost perfectly (r = **−0.95** against eccentricity) and is
-essentially independent of its *size* (r = −0.07 against current amplitude). A
+**The mechanism, which is the useful part.** Nuisance dispersion tracks the
+*shape* of the tidal ellipse almost perfectly (r ≈ **−0.9** against eccentricity)
+and is essentially independent of its *size* (r ≈ 0 against current amplitude). A
 rotary current never goes slack, so the strain ratio stays well conditioned; a
-rectilinear current passes through zero twice a cycle and the ratio blows up near
+reversing current passes through zero twice a cycle and the ratio blows up near
 slack water. The method is not signal-starved — it is ill-conditioned.
 
-That is actionable: if this method is to be deployed anywhere, it wants a site
-with a strongly rotary tidal current. And at the most rotary site tested it still
-misses by a factor of 2.3.
+**At a reversing-current site the statistic has no variance at all.** The ratio's
+denominator is the upper gauge's M2 amplitude, which approaches zero at slack
+water, and a ratio with a near-zero denominator is Cauchy-like. The sample
+standard deviation then *grows* with sample count instead of converging — it went
+38.7% → 53.4% between 700 and 2800 samples at Woods Hole and was still climbing.
+The app detects this by comparing σ against a robust scale:
+
+| Site | M2 ellipse ecc. | σ / robust scale | Statistic |
+|---|---|---|---|
+| Mayport, FL | 0.299 (rotary) | **1.02** | well behaved, σ valid |
+| Woods Hole, MA | 0.051 (reversing) | **5.00** | Cauchy-like, **variance undefined** |
+
+Where the variance does not exist, C3 is decided on a robust scale
+(0.7413 × IQR) rather than withheld — more samples cannot fix a statistic that
+has no variance. Woods Hole still fails, at 15.9% against the claimed 11.1%.
+
+That a detection statistic's variance does not exist at an ordinary offshore site
+is a finding against the method in its own right: a detection threshold cannot be
+set from a quantity that has no second moment.
+
+Actionable version: if this method is deployed anywhere, it wants a strongly
+rotary tidal current. And at the most rotary site tested it still misses by 2.3×.
 
 The platform site itself still needs a TPXO or FES extraction — both are
 registered downloads and are not shipped. But the evidence says that extraction

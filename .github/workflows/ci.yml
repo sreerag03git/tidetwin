@@ -35,13 +35,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest==9.1.1
 
-      - name: Verify the shipped geometry has not drifted from its manifest
+      - name: Verify the shipped data has not drifted
         run: |
           python - <<'PY'
           from tidetwin.geometry.oc4 import load_tables
+          from tidetwin.loads.noaa import REFERENCE_STATIONS, available_cached, load_pair, to_constituents
           t = load_tables()
           print(f"OC4 tables OK: {len(t.joints)} joints, {len(t.members)} members, "
                 f"digest {t.digest}")
+          cached = available_cached()
+          assert len(cached) == len(REFERENCE_STATIONS), (
+              f"only {len(cached)}/{len(REFERENCE_STATIONS)} tidal extractions committed")
+          for p in cached:
+              c = to_constituents(load_pair(p))
+              i = c.index("M2")
+              print(f"  {p.current_id:9s} M2 current {c.semi_major[i]:.3f} m/s, "
+                    f"F={c.form_factor():.3f}, retrieved {c.citation.retrieved}")
           PY
         env:
           PYTHONPATH: .
@@ -74,8 +83,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 900 samples, not fewer: at this station C3 has not converged below about
+      # 500, and the convergence guard correctly withholds the verdict when it
+      # has not. A cheaper run would publish UNTESTABLE and say nothing.
+      # No network is needed - the NOAA constants are committed.
       - name: Run the full analysis and rewrite the README table
-        run: python scripts/run_ledger.py --samples 80 --quiet --out ledger.csv --readme README.md
+        run: python scripts/run_ledger.py --samples 900 --quiet --out ledger.csv --readme README.md
+        timeout-minutes: 30
         env:
           PYTHONPATH: .
 

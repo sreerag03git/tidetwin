@@ -253,24 +253,32 @@ def _c3(art: Artifacts) -> ClaimResult:
     )
     if n.convergence is not None:
         detail += " " + n.convergence.verdict
-        if not n.convergence.converged:
+        if not n.convergence.converged and not n.convergence.heavy_tailed:
+            # Still settling: more samples would fix it, so decide nothing yet.
             status = Status.UNTESTABLE_DATA
             detail += (
                 " The verdict is withheld: an unconverged Monte Carlo has not decided "
                 "anything, and reporting it as FAIL would be as unfounded as reporting it "
                 "as PASS."
             )
+        elif n.convergence.heavy_tailed:
+            # No amount of sampling fixes an undefined variance, so the verdict
+            # stands on the robust scale rather than being withheld forever.
+            detail += (
+                " The verdict stands on the robust scale, which is well defined here. That "
+                "the variance of the method's own detection statistic does not exist at this "
+                "site is itself a finding against it."
+            )
     if n.break_even is not None:
         detail += " " + n.break_even.statement
     if n.decomposition is not None:
         detail += " " + n.decomposition.interpretation
-    return ClaimResult(
-        "C3",
-        status,
-        f"sigma = {n.joint_cv * 100:.2f} % of the intact ratio",
-        detail,
-        _contamination(art),
+    computed = (
+        f"robust scale = {n.effective_cv * 100:.2f} % of the intact ratio (variance undefined)"
+        if n.heavy_tailed
+        else f"sigma = {n.joint_cv * 100:.2f} % of the intact ratio"
     )
+    return ClaimResult("C3", status, computed, detail, _contamination(art))
 
 
 def _c4(art: Artifacts) -> ClaimResult:

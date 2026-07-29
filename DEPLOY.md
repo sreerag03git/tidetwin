@@ -44,9 +44,24 @@ banner appears at the top of every tab; the expensive Monte Carlo waits behind
 
 ## 2. Initialise the repository
 
-TideTwin is self-contained in this directory. Deploy it as its own repository so
-that `.streamlit/config.toml`, `requirements.txt` and `runtime.txt` sit at the
-repository root where Streamlit Cloud looks for them.
+TideTwin is self-contained in this directory, and there are two ways to deploy
+it. Both work; the first is cleaner.
+
+**Option A — its own repository (recommended).** `.streamlit/config.toml`,
+`requirements.txt` and `runtime.txt` then sit at the repository root, exactly
+where Streamlit Cloud looks for them. Follow the steps below as written.
+
+**Option B — from the existing monorepo.** If `tidetwin/` stays inside
+`scr-fatigue-twin`, set the main file path to `tidetwin/app.py` in the Streamlit
+dashboard. `app.py` inserts its own directory on `sys.path`, so the imports
+resolve either way. Two things to watch:
+
+- Streamlit Cloud may pick up the **repository root** `requirements.txt`, which
+  belongs to the other application in that repo and pins different versions.
+  Check the build log; if it installed the wrong set, use Option A.
+- The root `.streamlit/config.toml` is a light theme for the other app. TideTwin
+  injects its own CSS so it still renders correctly, but the browser chrome
+  colour will come from the root config.
 
 ```bash
 git init -b main

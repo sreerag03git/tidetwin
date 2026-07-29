@@ -7,10 +7,21 @@ Run with::
 
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
+import sys
+from pathlib import Path
+
+# Make `import tidetwin` work without PYTHONPATH being set. Streamlit Cloud runs
+# the entrypoint with the repository root as the working directory, which is not
+# necessarily this file's directory, so neither `python -m` nor an editable
+# install can be assumed.
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import plotly.graph_objects as go  # noqa: E402
+import streamlit as st  # noqa: E402
 
 from tidetwin.analysis import AnalysisConfig, run_full, run_quick
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
@@ -632,7 +643,14 @@ with TABS[4]:
                           yaxis_title="", hovermode="y unified")
         figure_block(fig, "c3_nuisance_budget", height=440)
 
-        cc = st.columns(3)
+        cc = st.columns(4 if getattr(n, "heavy_tailed", False) else 3)
+        if getattr(n, "heavy_tailed", False):
+            with cc[3]:
+                quantity(derived(
+                    n.joint_robust_sd / abs(n.baseline_ratio), "-",
+                    "robust scale (used for the verdict)", [],
+                    "0.7413 x IQR, the normal-consistent estimator",
+                    note="Used because the variance does not exist at this site."))
         with cc[0]:
             quantity(n.as_quantity())
         with cc[1]:
@@ -643,6 +661,20 @@ with TABS[4]:
                              "quadrature sum of slowly varying channels"))
         for ch, why in n.gated_channels.items():
             st.caption(f"{CHANNEL_LABELS[ch]}: {why}")
+
+        if getattr(n, "heavy_tailed", False):
+            unavailable_panel(
+                "The variance of the strain ratio does not exist at this site",
+                "The ratio's denominator is the upper gauge's M2 amplitude, which approaches "
+                "zero when a reversing tidal current slackens. A ratio with a near-zero "
+                f"denominator is Cauchy-like: the standard deviation here is "
+                f"{n.joint_sd / max(n.joint_robust_sd, 1e-12):.1f} times a robust scale of the "
+                "same sample, and it grows with sample count instead of converging. More "
+                "samples cannot fix that. The verdict below uses the robust scale "
+                "(0.7413 x IQR), which is well defined.",
+                "A detection threshold cannot be set from a quantity with no second moment. "
+                "This is a finding against the method, not a limitation of this analysis.",
+            )
 
         if getattr(n, "convergence", None) is not None:
             section("Has the deciding test converged?",

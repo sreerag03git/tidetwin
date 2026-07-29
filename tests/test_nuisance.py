@@ -18,6 +18,7 @@ from tidetwin.nuisance import (
     NuisanceResult,
     _correlated_storm,
     convergence_trace,
+    robust_scale,
     variance_decomposition,
     verdict,
     verdict_against_claimed_signature,
@@ -99,12 +100,17 @@ def test_convergence_trace_detects_a_settled_estimate():
     assert "Converged" in tr.verdict
 
 
-def test_convergence_trace_flags_a_drifting_estimate():
-    # Variance grows steadily through the run: never settles.
-    x = np.concatenate([np.random.default_rng(3).normal(0, s, 400) for s in (0.1, 1.0, 8.0)])
-    tr = convergence_trace(x)
+def test_convergence_trace_flags_a_still_settling_estimate():
+    """A small well-behaved sample: noisy, but nothing pathological.
+
+    Must be reported as 'needs more samples', not as heavy tailed - the two call
+    for opposite responses.
+    """
+    tr = convergence_trace(np.random.default_rng(3).normal(size=60))
     assert not tr.converged
+    assert not tr.heavy_tailed
     assert "NOT converged" in tr.verdict
+    assert "Increase the sample count" in tr.verdict
 
 
 def test_convergence_trace_handles_a_tiny_sample():
@@ -113,14 +119,140 @@ def test_convergence_trace_handles_a_tiny_sample():
     assert not np.isfinite(tr.relative_drift)
 
 
+# ------------------------------------------------------------- heavy tails
+
+
+def test_heavy_tails_are_distinguished_from_still_settling():
+    """A Cauchy ratio has no variance; sigma grows with n instead of settling.
+
+    This is the Woods Hole case: a near-rectilinear tidal current drives the
+    strain ratio's denominator through zero, and the ratio becomes Cauchy-like.
+    """
+    rng = np.random.default_rng(21)
+    tr = convergence_trace(rng.standard_cauchy(4000))
+    assert not tr.converged
+    assert tr.heavy_tailed
+    assert "no finite variance" in tr.verdict
+    assert "More samples will not help" in tr.verdict
+    # The defining signature: the robust scale settles, sigma does not.
+    assert tr.robust_drift <= 0.05 < tr.relative_drift
+
+    # Detection must not hinge on one lucky draw, so check several seeds.
+    flagged = sum(
+        convergence_trace(np.random.default_rng(s).standard_cauchy(4000)).heavy_tailed
+        for s in range(8)
+    )
+    assert flagged >= 7, f"only {flagged}/8 Cauchy samples detected"
+
+    # A well-behaved sample must not be misdiagnosed, at any size or seed.
+    false_positives = sum(
+        convergence_trace(np.random.default_rng(s).normal(size=n)).heavy_tailed
+        for s in range(8) for n in (60, 500, 4000)
+    )
+    assert false_positives == 0, f"{false_positives} normal samples wrongly flagged"
+
+    # A finite-variance scale mixture is heavy relative to a normal but still
+    # converges, so it must not be labelled as having no variance.
+    mixture = np.concatenate([rng.normal(0, s, 8000) for s in (0.5, 1.0, 2.0)])
+    assert not convergence_trace(mixture).heavy_tailed
+
+
+def test_robust_scale_matches_sigma_for_a_normal_sample():
+    """0.7413 * IQR is the normal-consistent estimator, so it must agree."""
+    rng = np.random.default_rng(22)
+    x = rng.normal(0.0, 3.0, 200_000)
+    assert robust_scale(x) == pytest.approx(3.0, rel=0.02)
+    assert robust_scale(x) == pytest.approx(np.std(x, ddof=1), rel=0.02)
+
+
+def test_robust_scale_stays_finite_where_sigma_explodes():
+    rng = np.random.default_rng(23)
+    cauchy = rng.standard_cauchy(20_000)
+    r = robust_scale(cauchy)
+    assert np.isfinite(r)
+    # The Cauchy(0,1) IQR is 2, so the normal-consistent scale is about 1.48.
+    assert r == pytest.approx(1.483, rel=0.1)
+    # The sample standard deviation is meaningless here and far larger.
+    assert np.std(cauchy, ddof=1) > 5 * r
+
+
+def test_robust_scale_needs_a_usable_sample():
+    assert not np.isfinite(robust_scale(np.array([1.0, 2.0])))
+
+
+def test_verdict_uses_the_robust_scale_when_the_variance_diverges():
+    rng = np.random.default_rng(24)
+    res = _result(joint_sd=99.0, baseline=2.0)
+    res.joint_samples = 2.0 + 0.02 * rng.standard_cauchy(4000)
+    res.joint_sd = float(np.std(res.joint_samples, ddof=1))
+    res.convergence = convergence_trace(res.joint_samples)
+    assert res.heavy_tailed
+    # The robust scale is far smaller and far more stable than sigma.
+    assert res.effective_sd == res.joint_robust_sd
+    assert res.effective_sd < res.joint_sd
+    assert "robust scale" in res.dispersion_kind
+
+    status, msg = verdict_against_claimed_signature(res, 0.111)
+    assert status in ("PASS", "MARGINAL", "FAIL")
+    assert "variance itself does not converge" in msg
+    assert "poor basis for a detection threshold" in msg
+
+
+def test_heavy_tailed_run_is_decided_not_withheld():
+    """No amount of sampling fixes an undefined variance, so do not stall forever."""
+    from tidetwin.claims.registry import Artifacts, Status, evaluate_all
+
+    rng = np.random.default_rng(25)
+    res = _result(joint_sd=1.0, baseline=2.0)
+    res.joint_samples = 2.0 + 0.5 * rng.standard_cauchy(4000)
+    res.joint_sd = float(np.std(res.joint_samples, ddof=1))
+    res.convergence = convergence_trace(res.joint_samples)
+    assert res.heavy_tailed
+
+    c3 = next(r for r in evaluate_all(Artifacts(c3=res)) if r.claim_id == "C3")
+    assert c3.status is Status.FAIL, "a heavy-tailed run must still be decided"
+    assert "withheld" not in c3.detail
+    assert "variance of the method's own detection statistic does not exist" in c3.detail
+    assert "variance undefined" in c3.computed_text
+
+
+def test_the_two_failure_modes_get_opposite_treatment():
+    """Still settling -> withhold and ask for more samples.
+
+    Heavy tailed -> decide on the robust scale, because more samples cannot help.
+    Conflating the two would either stall forever or quote a diverging number.
+    """
+    from tidetwin.claims.registry import Artifacts, Status, evaluate_all
+
+    settling = _result(joint_sd=0.3)
+    settling.joint_samples = np.random.default_rng(4).normal(size=60)
+    settling.convergence = convergence_trace(settling.joint_samples)
+    # Preconditions: this fixture must genuinely be the "needs more samples" case.
+    assert not settling.convergence.converged
+    assert not settling.convergence.heavy_tailed
+    withheld = next(r for r in evaluate_all(Artifacts(c3=settling)) if r.claim_id == "C3")
+
+    heavy = _result(joint_sd=0.3)
+    heavy.joint_samples = 2.0 + 0.4 * np.random.default_rng(26).standard_cauchy(4000)
+    heavy.joint_sd = float(np.std(heavy.joint_samples, ddof=1))
+    heavy.convergence = convergence_trace(heavy.joint_samples)
+    assert heavy.convergence.heavy_tailed
+    decided = next(r for r in evaluate_all(Artifacts(c3=heavy)) if r.claim_id == "C3")
+
+    assert withheld.status is Status.UNTESTABLE_DATA
+    assert decided.status is not Status.UNTESTABLE_DATA
+    assert "Increase the sample count" in withheld.detail
+    assert "More samples will not help" in decided.detail
+
+
 def test_unconverged_run_withholds_the_verdict():
     """A Monte Carlo that has not converged has not decided anything."""
     from tidetwin.claims.registry import Artifacts, Status, evaluate_all
 
     res = _result(0.30)
-    res.convergence = convergence_trace(
-        np.concatenate([np.random.default_rng(4).normal(0, s, 400) for s in (0.1, 1.0, 8.0)])
-    )
+    res.joint_samples = np.random.default_rng(4).normal(size=60)
+    res.convergence = convergence_trace(res.joint_samples)
+    assert not res.convergence.converged and not res.convergence.heavy_tailed
     art = Artifacts(c3=res)
     c3 = next(r for r in evaluate_all(art) if r.claim_id == "C3")
     assert c3.status is Status.UNTESTABLE_DATA

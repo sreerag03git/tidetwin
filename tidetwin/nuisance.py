@@ -29,9 +29,25 @@ Channels 5 and 7 change the structure and so need their own response surface;
 they are evaluated on a small grid and interpolated. The rest are load-side and
 cost a table lookup each.
 
-Verdict rule, applied without softening: if the joint nuisance sigma exceeds one
-third of the C2 damage signature, C3 is ``FAIL`` and the method as specified does
-not achieve reliable detection.
+Verdict rule, applied without softening: if the joint nuisance dispersion exceeds
+one third of the C2 damage signature, C3 is ``FAIL`` and the method as specified
+does not achieve reliable detection.
+
+One result deserves flagging here rather than being buried. The statistic under
+test is a *ratio* of two strain amplitudes, and at a site with a reversing
+(near-rectilinear) tidal current its denominator passes close to zero twice a
+cycle, when the current slackens. A ratio with a near-zero denominator is
+Cauchy-like: **its variance does not exist**, and the sample standard deviation
+grows without bound as the Monte Carlo runs longer rather than converging. That
+is not a defect of this Monte Carlo, it is a property of the statistic the method
+chose. It is detected (:func:`convergence_trace`), reported, and worked around
+with a robust scale (:func:`robust_scale`) so a verdict can still be reached.
+
+The practical consequence: nuisance dispersion tracks the *shape* of the tidal
+ellipse, not its size. At a strongly rotary site the ratio is well behaved
+(standard deviation and robust scale agree to within a couple of percent); at a
+reversing site the standard deviation runs to five times the robust scale and the
+statistic is pathological.
 """
 
 from __future__ import annotations
@@ -226,12 +242,29 @@ class VarianceDecomposition:
 
 @dataclass(frozen=True)
 class ConvergenceTrace:
-    """Running estimate of the joint sigma against sample count."""
+    """Running estimate of the joint sigma against sample count.
+
+    Distinguishes two very different reasons a run has not settled:
+
+    *Still settling* - sigma wanders and will converge with more samples.
+
+    *Heavy tailed* - sigma **grows** steadily with sample count, which is what
+    happens when the underlying distribution has no finite variance. More samples
+    will not help, because there is nothing to converge to. The strain ratio is
+    especially prone to this: its denominator is the upper gauge's M2 amplitude,
+    which approaches zero when a reversing tidal current goes slack, and a ratio
+    with a near-zero denominator is Cauchy-like. That is a property of the
+    statistic the method under test chose, not of this Monte Carlo.
+    """
 
     n_samples: np.ndarray
     sigma: np.ndarray
     converged: bool
     relative_drift: float
+    heavy_tailed: bool = False
+    growth_ratio: float = 1.0
+    robust: np.ndarray | None = None
+    robust_drift: float = float("nan")
 
     @property
     def verdict(self) -> str:
@@ -239,6 +272,16 @@ class ConvergenceTrace:
             return (
                 f"Converged: sigma moves by {self.relative_drift * 100:.1f} percent over the "
                 "last half of the run, within the 5 percent tolerance."
+            )
+        if self.heavy_tailed:
+            return (
+                f"Sigma does not settle ({self.relative_drift * 100:.0f} percent drift) while a "
+                f"robust scale of the same samples does ({self.robust_drift * 100:.1f} percent). "
+                "A robust scale converges for any distribution with a density; the standard "
+                "deviation converges only if the variance exists. So this is the signature of "
+                "a distribution with no finite variance: the strain ratio's denominator passes "
+                "near zero when the tidal current slackens, making the ratio Cauchy-like. More "
+                "samples will not help. The verdict uses the robust scale."
             )
         return (
             f"NOT converged: sigma is still moving by {self.relative_drift * 100:.1f} percent "
@@ -312,6 +355,41 @@ class NuisanceResult:
     def joint_cv(self) -> float:
         """Joint sigma as a fraction of the baseline ratio."""
         return float(self.joint_sd / abs(self.baseline_ratio)) if self.baseline_ratio else np.inf
+
+    @property
+    def joint_robust_sd(self) -> float:
+        """Dispersion from the IQR, which stays finite under heavy tails."""
+        return robust_scale(self.joint_samples)
+
+    @property
+    def heavy_tailed(self) -> bool:
+        return bool(self.convergence is not None and self.convergence.heavy_tailed)
+
+    @property
+    def effective_sd(self) -> float:
+        """The dispersion the verdict should use.
+
+        The standard deviation normally, the robust scale when the variance has
+        been shown not to exist. Using a statistic that diverges would make the
+        verdict depend on how long the Monte Carlo happened to run.
+        """
+        if self.heavy_tailed:
+            r = self.joint_robust_sd
+            if np.isfinite(r):
+                return r
+        return self.joint_sd
+
+    @property
+    def effective_cv(self) -> float:
+        return (
+            float(self.effective_sd / abs(self.baseline_ratio))
+            if self.baseline_ratio
+            else np.inf
+        )
+
+    @property
+    def dispersion_kind(self) -> str:
+        return "robust scale (0.7413 x IQR)" if self.heavy_tailed else "standard deviation"
 
     @property
     def joint_sd_standard_error(self) -> float:
@@ -671,11 +749,49 @@ def convergence_trace(
     if x.size < 8:
         return ConvergenceTrace(np.array([x.size]), np.array([np.nan]), False, float("nan"))
     ns = np.unique(np.linspace(8, x.size, n_points).astype(int))
+
+    def _drift(trace: np.ndarray) -> float:
+        half = trace[len(trace) // 2 :]
+        final = trace[-1]
+        return float(np.max(np.abs(half - final)) / final) if final > 0 else float("inf")
+
     sd = np.array([np.std(x[:n], ddof=1) for n in ns])
+    rob = np.array([robust_scale(x[:n]) for n in ns])
+    drift = _drift(sd)
+    rob_drift = _drift(rob)
+    converged = bool(drift <= tolerance)
+
     half = sd[len(sd) // 2 :]
-    final = sd[-1]
-    drift = float(np.max(np.abs(half - final)) / final) if final > 0 else float("inf")
-    return ConvergenceTrace(ns, sd, bool(drift <= tolerance), drift)
+    mid = half[0] if half.size else sd[-1]
+    growth = float(sd[-1] / mid) if mid > 0 else 1.0
+
+    # Heavy tails are detected by comparing how the two dispersion measures
+    # behave, not by thresholding their ratio. A robust scale converges for any
+    # distribution with a density; the standard deviation converges only if the
+    # variance exists. So "the robust scale has settled and sigma has not" is the
+    # signature of a variance that does not exist - and unlike a threshold on
+    # sigma/robust, it does not depend on whether one extreme draw happened to
+    # land in this particular sample. The final ratio is required to exceed 1.5
+    # as well, purely to avoid labelling a run where the two measures agree.
+    ratio = float(sd[-1] / rob[-1]) if rob[-1] > 0 and np.isfinite(rob[-1]) else float("inf")
+    heavy = bool(not converged and rob_drift <= tolerance and ratio > 1.5)
+    return ConvergenceTrace(ns, sd, converged, drift, heavy, growth, rob, rob_drift)
+
+
+def robust_scale(samples: np.ndarray) -> float:
+    """Normal-consistent dispersion from the interquartile range.
+
+    ``0.7413 * IQR`` equals the standard deviation for a normal sample and stays
+    finite for heavy-tailed ones, where the standard deviation does not exist.
+    Used for the C3 verdict whenever the variance fails to converge, so a site
+    whose strain ratio is Cauchy-like still gets a decision rather than a shrug.
+    """
+    x = np.asarray(samples, float).ravel()
+    x = x[np.isfinite(x)]
+    if x.size < 4:
+        return float("nan")
+    q75, q25 = np.percentile(x, [75, 25])
+    return float(0.7413 * (q75 - q25))
 
 
 def variance_decomposition(
@@ -818,13 +934,21 @@ def verdict_against_claimed_signature(
     """
     if not np.isfinite(claimed_signature_fraction) or claimed_signature_fraction <= 0:
         return "UNTESTABLE - DATA MISSING", "No claimed signature supplied to compare against."
-    nuisance_fraction = result.joint_cv
+    nuisance_fraction = result.effective_cv
     frac = nuisance_fraction / claimed_signature_fraction
+    label = "Nuisance dispersion" if result.heavy_tailed else "Nuisance sigma"
     generous = (
-        f"Nuisance sigma is {nuisance_fraction * 100:.2f} percent of the intact ratio, against a "
-        f"claimed damage signature of {claimed_signature_fraction * 100:.2f} percent - a ratio of "
+        f"{label} is {nuisance_fraction * 100:.2f} percent of the intact ratio "
+        f"({result.dispersion_kind}), against a claimed damage signature of "
+        f"{claimed_signature_fraction * 100:.2f} percent - a ratio of "
         f"{frac:.2f}, versus the {threshold_fraction:.2f} limit. "
     )
+    if result.heavy_tailed:
+        generous += (
+            "The variance itself does not converge at this site, so a robust scale is used; "
+            "note that a statistic whose variance does not exist is a poor basis for a "
+            "detection threshold in the first place. "
+        )
     if frac > threshold_fraction:
         return "FAIL", generous + (
             "The method fails on the paper's own claimed signal strength, so this verdict "
