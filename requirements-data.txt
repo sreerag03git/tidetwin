@@ -8,6 +8,13 @@
 # Environment tab switches the tidal constants from ASSUMED to MEASURED.
 
 -r requirements.txt
+
+# Copernicus Climate Data Store client, for the ERA5 metocean channels (C3
+# wind/wave terms, C5 thermal). Only does anything with CDS credentials, so it
+# lives here rather than in the deployed app's core requirements. Without it,
+# ERA5 reports DATA UNAVAILABLE and the dependent claims read UNTESTABLE.
+cdsapi==0.7.7
+
 pyTMD==3.0.9
 netCDF4==1.7.2
 xarray==2025.1.2
