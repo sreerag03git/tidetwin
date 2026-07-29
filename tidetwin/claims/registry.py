@@ -232,12 +232,18 @@ def _c2(art: Artifacts) -> ClaimResult:
     if st_res is not None:
         got = st_res.at_claimed_reduction
         claimed = st_res.claimed_signature
+        by = st_res.change_by_mode
+        breakdown = ", ".join(
+            f"{k} {v * 100:+.3f} %" for k, v in sorted(by.items(), key=lambda kv: -abs(kv[1]))
+        )
         detail = st_res.verdict + (
             " This is the paper's own intermediate quantity, so the result does not depend "
             "on how the crack was modelled here, nor on the shell-FE surface that is not "
-            "shipped. It is consistent with the local-joint-flexibility sweep on the "
-            "Structure tab: removing joint flexibility altogether moves the ratio under 1 "
-            "percent, so a 10 percent reduction in it cannot move the ratio by 11."
+            "shipped. Every reading of which stiffness is meant was swept ("
+            + breakdown + "), and the claim is judged on the most favourable. It is "
+            "consistent with the local-joint-flexibility sweep on the Structure tab: "
+            "removing joint flexibility altogether moves the ratio under 1 percent, so a 10 "
+            "percent reduction in it cannot move the ratio by 11."
         )
         if abs(got - claimed) / claimed <= 0.25:
             status = Status.PASS
@@ -253,7 +259,8 @@ def _c2(art: Artifacts) -> ClaimResult:
             )
         return ClaimResult(
             "C2", status,
-            f"{got * 100:.3f} % at the paper's own 10 % stiffness reduction",
+            f"{got * 100:+.3f} % at the paper's own 10 % reduction "
+            f"({st_res.best_mode}, best case)",
             detail, _contamination(art),
         )
 
