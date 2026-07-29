@@ -11,8 +11,11 @@ import numpy as np
 import pytest
 
 from tidetwin.loads.tides import constituent_frequency
+from tidetwin.abstract import PAPER
 from tidetwin.rosette import (
+    DAMAGE_RESPONSE_BY_OBSERVABLE,
     ROSETTE_ANGLES_DEG,
+    damage_snr,
     axial_drag_ratio,
     axial_ratio,
     drag_component,
@@ -179,3 +182,39 @@ def test_a_flat_tide_reference_gives_nan_rather_than_a_phase_from_nowhere():
     assert np.isnan(drag_component(T, tide(1.0), flat))
     up = [tide(1.0, np.pi / 2) for _ in ROSETTE_ANGLES_DEG]
     assert np.isnan(axial_drag_ratio(T, up, up, flat))
+
+
+# ---------------------------------------------------------------------------
+# Why the same move that rescued C3 does not rescue C2.
+
+
+def test_the_axial_channel_is_quiet_because_it_is_damage_blind():
+    """The two are the same fact, not a coincidence.
+
+    Axial force in a braced frame is set by global equilibrium, so one soft joint
+    barely moves it. That is exactly why the axial ratio survives environmental
+    nuisance (C3) and exactly why it cannot see a crack (C2).
+    """
+    ax = DAMAGE_RESPONSE_BY_OBSERVABLE["axial rosette"]
+    bend = DAMAGE_RESPONSE_BY_OBSERVABLE["bending rosette"]
+    assert abs(ax) < 0.0005, "axial must be near-blind to a local stiffness change"
+    assert abs(bend) > 5 * abs(DAMAGE_RESPONSE_BY_OBSERVABLE["single pair"])
+
+
+def test_sensitivity_alone_does_not_decide_anything():
+    """The bending ratio is the most damage-sensitive observable and still useless.
+
+    Quoting a sensitivity without the noise on the same observable is how a
+    hopeless channel gets reported as the best one.
+    """
+    bend = DAMAGE_RESPONSE_BY_OBSERVABLE["bending rosette"]
+    assert damage_snr(bend) < 1.0, "the damage step must be smaller than its own noise"
+    assert damage_snr(PAPER.damage_signature) < 1.0, (
+        "even the CLAIMED step must fall short on this channel, or the argument changes"
+    )
+
+
+def test_the_snr_helper_is_a_plain_ratio_and_handles_zero_noise():
+    assert damage_snr(0.02, 0.01) == pytest.approx(2.0)
+    assert damage_snr(-0.02, 0.01) == pytest.approx(2.0)
+    assert np.isinf(damage_snr(0.02, 0.0))

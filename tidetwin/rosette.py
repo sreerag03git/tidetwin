@@ -56,6 +56,9 @@ __all__ = [
     "axial_series",
     "drag_component",
     "axial_drag_ratio",
+    "DAMAGE_RESPONSE_BY_OBSERVABLE",
+    "BENDING_RATIO_NOISE",
+    "damage_snr",
 ]
 
 #: Four equally spaced positions. Diametrically opposed pairs are what make the
@@ -199,3 +202,59 @@ def axial_drag_ratio(
     if not np.isfinite(up) or up <= 0:
         return float("nan")
     return float(drag_component(times_s, axial_series(lower_by_angle), elevation) / up)
+
+
+# ------------------------------------------------------- damage sensitivity
+# C3 was fixed by changing the observable: the axial combination is immune to
+# the nuisance that was drowning the signal. The obvious next move is to fix C2
+# the same way, and it does not work - for a reason worth stating precisely.
+#
+# The three observables trade off against each other, measured at J5 under the
+# paper's own 10 percent joint stiffness reduction:
+#
+#     observable        damage response   measurement noise   SNR
+#     axial rosette          -0.007 %            ~1.2 %       ~0
+#     single pair            +0.356 %              -          low
+#     bending rosette        -1.906 %            12.4 %       0.15
+#
+# Axial force in a braced frame is a GLOBAL equilibrium quantity. One joint going
+# soft barely redistributes it, which is exactly why the axial ratio is both
+# beautifully quiet and completely damage-blind. Bending is where a rotational
+# joint spring shows up, and it is indeed 5.7 times more damage-sensitive - but a
+# braced jacket suppresses leg bending by design, so the bending amplitude is
+# about 0.021 microstrain and its own harmonic-fit noise is 12 percent of the
+# ratio. The damage step is seven times smaller than the noise on it.
+#
+# Moving the gauges does not help. Swept from 0.25 m to 2.5 m from the joint the
+# bending amplitude stays at 0.021 microstrain and the sensitivity between -1.81
+# and -2.12 percent: this is a global bending mode of the leg, not a local joint
+# disturbance that decays, so there is no placement that recovers it.
+#
+# The conclusion is not that C2 needs a better estimator. It is that on a braced
+# jacket no strain-ratio observable is both quiet enough and damage-sensitive
+# enough, because the same bracing that makes the structure stiff also routes the
+# load around the joint whose health is being inferred.
+
+#: Measured at J5 under a 10 percent out-of-plane joint stiffness reduction.
+#: Kept as a named constant so the ledger can quote it without recomputing a
+#: forty-surface sweep on every run. See scripts/c2_observable_experiment.py.
+DAMAGE_RESPONSE_BY_OBSERVABLE: dict[str, float] = {
+    "single pair": 0.00356,
+    "axial rosette": -0.00007,
+    "bending rosette": -0.01906,
+}
+
+#: Fractional measurement noise on the bending ratio from FBG noise alone, after
+#: harmonic fitting over a 14-day record. The reason the bending channel cannot
+#: be used despite being the most damage-sensitive of the three.
+BENDING_RATIO_NOISE: float = 0.1236
+
+
+def damage_snr(response: float, noise: float = BENDING_RATIO_NOISE) -> float:
+    """Signal-to-noise of a damage step against the noise on its own observable.
+
+    A sensitivity figure means nothing on its own: the bending ratio responds to
+    damage five times better than a single pair and is still useless, because the
+    noise on it is larger again. This is the number that decides.
+    """
+    return abs(response) / noise if noise > 0 else float("inf")
