@@ -290,6 +290,35 @@ def _c2(art: Artifacts) -> ClaimResult:
                     " At the paper's own joint flexibility the claimed change IS reproduced, "
                     "which overturns the verdict computed on this frame's stiffer joint."
                 )
+        # C3 was rescued by changing the observable. The same move was tried here
+        # and does not work, and saying why is more useful than the verdict.
+        from ..rosette import (
+            BENDING_RATIO_NOISE,
+            DAMAGE_RESPONSE_BY_OBSERVABLE,
+            damage_snr,
+        )
+
+        _bend = DAMAGE_RESPONSE_BY_OBSERVABLE["bending rosette"]
+        _ax = DAMAGE_RESPONSE_BY_OBSERVABLE["axial rosette"]
+        detail += (
+            " Changing the observable does not rescue this the way it rescues C3. A "
+            "four-gauge rosette separates the axial and bending parts of the strain, and "
+            f"they trade off against each other: the axial ratio moves {_ax * 100:+.3f} "
+            "percent under the paper's own stiffness step - it is quiet enough to fix C3 "
+            "precisely because axial force in a braced frame is a global equilibrium "
+            "quantity that one soft joint barely redistributes, which also makes it "
+            f"damage-blind. The bending ratio moves {_bend * 100:+.3f} percent, five to "
+            "six times more, but a braced jacket suppresses leg bending by design: the "
+            "amplitude is about 0.021 microstrain and its own harmonic-fit noise is "
+            f"{BENDING_RATIO_NOISE * 100:.1f} "
+            f"percent of the ratio, so the damage step arrives at a signal-to-noise of "
+            f"{damage_snr(_bend):.2f}. Even the claimed 11.1 percent would reach only 0.9. "
+            "Sweeping the gauges from 0.25 m to 2.5 m from the joint changes neither the "
+            "amplitude nor the sensitivity, so this is a global bending mode of the leg "
+            "rather than a local joint disturbance, and no placement recovers it. The "
+            "bracing that makes the structure stiff is the same thing that routes load "
+            "around the joint whose health is being inferred."
+        )
         if art.c2 is not None:
             detail += (
                 f" The independent crack-model route agrees in direction: it gives "
