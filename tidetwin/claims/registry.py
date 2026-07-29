@@ -110,6 +110,19 @@ class Claim:
     test: Callable[[Artifacts], ClaimResult]
     note: str = ""
 
+    @property
+    def quote(self) -> str:
+        """The abstract's own words for this claim.
+
+        The ``statement`` above is a paraphrase written here, and a paraphrase is
+        a place for a claim to be quietly softened or sharpened before it is
+        judged. The verbatim text is carried alongside so a reader can check
+        what was actually asserted against what was actually tested.
+        """
+        from ..abstract import CLAIM_TEXT
+
+        return CLAIM_TEXT.get(self.id, "")
+
 
 def _contamination(art: Artifacts) -> tuple[str, ...]:
     out: list[str] = []
@@ -461,6 +474,32 @@ def _c6(art: Artifacts) -> ClaimResult:
             "is outside that band."
         )
     detail += " " + c.model_error_note
+
+    # The abstract states a second, sharper C6 claim: convergence to within 8
+    # percent of true damage within 18 months. Unlike the remaining-life
+    # interval, that one is testable here, so it is tested.
+    try:
+        ac = c.abstract_convergence()
+    except Exception:  # noqa: BLE001 - an older artifact without the method
+        ac = None
+    if ac is not None:
+        detail += (
+            f" On the abstract's own convergence criterion - within "
+            f"{ac['tolerance'] * 100:.0f} percent of true damage by month "
+            f"{ac['by_years'] * 12:.0f} - the log-EnKF reaches "
+            f"{ac['error_at_deadline'] * 100:.1f} percent, so the criterion is "
+            + ("met" if ac["met"] else "not met") + "."
+        )
+        if ac["met"] and ac["baseline_also_meets"]:
+            detail += (
+                f" It is met vacuously, though: the no-update baseline, which assimilates "
+                f"nothing at all, reaches {ac['baseline_error_at_deadline'] * 100:.1f} percent "
+                "over the same period and passes the same test. A criterion the do-nothing "
+                "case also satisfies carries no evidence about the filter, so this number "
+                "should not be quoted in support of the assimilation. The CRPS and coverage "
+                "comparison above is the part that discriminates, and it is what the status "
+                "is based on."
+            )
     if not art.paris_available:
         detail += (
             " The remaining-life claim of +/-0.9 years is UNTESTABLE - DATA MISSING: it needs "

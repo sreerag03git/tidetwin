@@ -45,6 +45,76 @@ class FilterComparison:
     def best_by_crps(self) -> str:
         return min(self.reports, key=lambda k: self.reports[k].crps)
 
+    def relative_error(self, name: str) -> np.ndarray:
+        """|ensemble mean - truth| / truth, at each time."""
+        mean = self.ensembles[name].mean(axis=1)
+        return np.abs(mean - self.truth) / np.maximum(np.abs(self.truth), 1e-15)
+
+    def error_at(self, name: str, years: float) -> float:
+        """Relative error at a given time, interpolated between steps."""
+        return float(np.interp(years, self.times_years, self.relative_error(name)))
+
+    def first_within(self, name: str, tol: float, hold: bool = True) -> float:
+        """First time the estimate comes within ``tol`` of the truth.
+
+        With ``hold``, it must also stay there for the rest of the run. That is
+        the meaningful reading of "converges": an estimate that passes through
+        the tolerance band on its way somewhere else has not converged to it, and
+        under structural model error a filter can do exactly that.
+
+        ``nan`` if it never gets there, or never stays.
+        """
+        err = self.relative_error(name)
+        inside = err <= tol
+        if not np.any(inside):
+            return float("nan")
+        if not hold:
+            return float(self.times_years[int(np.argmax(inside))])
+        # Walk back from the end to find the start of the final run of `inside`.
+        if not inside[-1]:
+            return float("nan")
+        i = len(inside) - 1
+        while i > 0 and inside[i - 1]:
+            i -= 1
+        return float(self.times_years[i])
+
+    def abstract_convergence(
+        self, name: str = "log-EnKF", tol: float = 0.08, by_years: float = 1.5,
+    ) -> dict[str, float | bool | str]:
+        """The abstract's stated convergence claim, tested directly.
+
+        It says the log-EnKF "converges to within 8 percent of true damage within
+        18 months". Both numbers are the paper's own; the defaults here are them.
+
+        The companion claim - that the 90 percent interval narrows from +/-3.2 to
+        +/-0.9 *years* by month 36 - is not testable here and is not faked. That
+        interval is on remaining fatigue life, which needs the Paris constants
+        from BS 7910 and the S-N curve from DNV-RP-C203. Neither is shipped, so
+        no crack-size interval can be converted into one on years.
+        """
+        err_at = self.error_at(name, by_years)
+        first = self.first_within(name, tol)
+        # A criterion that the do-nothing baseline also passes is not evidence
+        # about the filter. Under this setup the prior mean starts close to the
+        # truth, so an 8 percent band at 18 months is wide enough that never
+        # assimilating anything clears it too - the claim is true and empty.
+        baseline = "no-update baseline"
+        base_err = (self.error_at(baseline, by_years)
+                    if baseline in self.ensembles else float("nan"))
+        met = bool(err_at <= tol)
+        base_met = bool(base_err <= tol)
+        return {
+            "tolerance": tol,
+            "by_years": by_years,
+            "error_at_deadline": err_at,
+            "first_within_years": first,
+            "met": met,
+            "ever_converges": bool(np.isfinite(first)),
+            "baseline_error_at_deadline": base_err,
+            "baseline_also_meets": base_met,
+            "discriminates": bool(met and not base_met),
+        }
+
     def headline(self) -> str:
         lines = []
         for name, r in self.reports.items():

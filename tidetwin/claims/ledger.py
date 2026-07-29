@@ -117,6 +117,7 @@ def ledger_frame(results: list[ClaimResult]) -> pd.DataFrame:
             {
                 "id": c.id,
                 "statement": c.statement,
+                "abstract_quote": c.quote,
                 "claimed": c.claimed_value,
                 "computed": r.computed_text,
                 "status": r.status.value,
