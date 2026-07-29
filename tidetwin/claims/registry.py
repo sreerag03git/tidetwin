@@ -27,6 +27,15 @@ class Status(str, Enum):
     FAIL = "FAIL"
     UNTESTABLE_DATA = "UNTESTABLE - DATA MISSING"
     UNTESTABLE_PHYSICAL = "UNTESTABLE - REQUIRES PHYSICAL TEST"
+    #: Not a verdict. The analysis has not been run yet, which is a completely
+    #: different thing from "the data needed to settle this does not exist", and
+    #: showing the latter for the former misrepresents the ledger.
+    NOT_RUN = "NOT RUN YET"
+
+    @property
+    def is_verdict(self) -> bool:
+        """Whether this represents an actual finding about the claim."""
+        return self is not Status.NOT_RUN
 
     @property
     def colour(self) -> str:
@@ -42,6 +51,7 @@ class Status(str, Enum):
             "FAIL": "#b3261e",
             "UNTESTABLE - DATA MISSING": "#4a545e",
             "UNTESTABLE - REQUIRES PHYSICAL TEST": "#4a545e",
+            "NOT RUN YET": "#8a929b",
         }[self.value]
 
 
@@ -120,7 +130,14 @@ def _contamination(art: Artifacts) -> tuple[str, ...]:
 
 
 def _missing(claim_id: str, what: str, remedy: str) -> ClaimResult:
-    return ClaimResult(claim_id, Status.UNTESTABLE_DATA, "not computed", f"{what} {remedy}")
+    """Not yet computed. This is NOT a verdict and must never read as one."""
+    return ClaimResult(
+        claim_id,
+        Status.NOT_RUN,
+        "awaiting analysis",
+        f"{what} {remedy}".strip()
+        + " This is not a finding: the analysis has simply not been run yet.",
+    )
 
 
 def evaluate(claim: "Claim", art: Artifacts) -> ClaimResult:
