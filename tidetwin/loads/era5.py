@@ -31,7 +31,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from ..provenance import Citation, DataUnavailable, measured
@@ -155,7 +154,6 @@ def fetch(req: ERA5Request, root: Path | None = None) -> pd.DataFrame:
             "Configure CDSAPI_KEY, or pre-populate data/era5_cache/ with a prior download.",
         )
 
-    import cdsapi  # pragma: no cover - requires credentials
 
     raise DataUnavailable(  # pragma: no cover
         "ERA5 reanalysis (Copernicus CDS)",

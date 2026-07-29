@@ -60,7 +60,7 @@ import numpy as np
 from .geometry.oc4 import SensorPair, build_jacket, load_tables
 from .loads.morison import HydroConfig
 from .loads.tides import TidalConstituents, constituent_frequency
-from .provenance import Provenance, Quantity, assumed, derived
+from .provenance import Quantity, assumed, derived
 from .response import ResponseSurface, build_response_surface
 from .signal.harmonic import fit_harmonics
 
@@ -443,7 +443,7 @@ class NuisanceResult:
             ),
             note=(
                 "assumption-contaminated: nuisance ranges are ASSUMED. "
-                f"Dominant channels: "
+                "Dominant channels: "
                 + ", ".join(f"{CHANNEL_LABELS[c]} {s:.4f}" for c, s in self.dominant_channels())
             ),
         )

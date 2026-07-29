@@ -19,9 +19,8 @@ from __future__ import annotations
 import html as _html
 from dataclasses import dataclass
 
-import numpy as np
 
-from .claims.ledger import Stamp, ledger_frame
+from .claims.ledger import Stamp
 from .claims.registry import CLAIMS, Artifacts, ClaimResult, Status
 
 __all__ = ["ReportInputs", "to_markdown", "to_html", "to_text"]

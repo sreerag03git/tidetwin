@@ -49,7 +49,7 @@ import numpy as np
 
 from ..numerics import BilinearGrid
 from ..provenance import Citation, DataUnavailable, Quantity, derived
-from .newman_raju import NEWMAN_RAJU, boundary_correction_F, shape_factor_Q
+from .newman_raju import boundary_correction_F, shape_factor_Q
 
 __all__ = [
     "TADA_PARIS",

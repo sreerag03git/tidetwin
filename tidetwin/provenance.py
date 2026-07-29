@@ -26,7 +26,7 @@ import datetime as _dt
 import math
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 
