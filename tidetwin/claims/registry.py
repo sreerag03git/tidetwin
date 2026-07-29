@@ -341,6 +341,17 @@ def _c3(art: Artifacts) -> ClaimResult:
         + f" Dominant channels: {top}. Monte Carlo standard error on sigma is "
         f"{n.joint_sd_standard_error / abs(n.baseline_ratio) * 100:.2f} percentage points."
     )
+    # The same failure without any statistics in it, which is the form that
+    # survives being read quickly.
+    fa = n.false_alarm_fraction(0.111)
+    if np.isfinite(fa):
+        detail += (
+            f" Stated without statistics: in {fa * 100:.1f} percent of Monte Carlo draws "
+            "with no damage anywhere in the structure, environmental variation alone moves "
+            "the strain ratio by at least the 11.1 percent a crack is claimed to move it. "
+            "Every one of those is a false alarm from a detector set at the claimed "
+            "signature, before any crack exists to detect."
+        )
     if n.convergence is not None:
         detail += " " + n.convergence.verdict
         if not n.convergence.converged and not n.convergence.heavy_tailed:
