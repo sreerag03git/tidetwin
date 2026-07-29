@@ -195,10 +195,14 @@ def run_control(container, key, *, prominent: bool) -> None:
                         key=f"run_{'side' if prominent else 'top'}"):
         bar = container.progress(0.0, "starting")
         try:
+            _cfg = _cfg_from_key(key)
             st.session_state.full = run_full(
-                _cfg_from_key(key), lambda f, m: bar.progress(min(f, 1.0), m)
+                _cfg, lambda f, m: bar.progress(min(f, 1.0), m)
             )
             st.session_state.full_key = key
+            # Kept so the stamp and captions can describe the run being shown
+            # rather than whatever the sidebar says later.
+            st.session_state.full_cfg = _cfg
         finally:
             bar.empty()
         st.rerun()
@@ -442,6 +446,7 @@ st.session_state.booted = True
 if "full" not in st.session_state:
     st.session_state.full = None
     st.session_state.full_key = None
+    st.session_state.full_cfg = None
 
 # Run the full analysis automatically the first time. Showing nine claims as
 # "not run yet" on arrival makes the ledger look broken, and a reader has no way
@@ -454,9 +459,11 @@ if _first and st.session_state.full is None:
     )
     try:
         st.session_state.full = _full(key)
+        st.session_state.full_cfg = cfg
         st.session_state.full_key = key
     except Exception as exc:  # noqa: BLE001 - the app must still open
         st.session_state.full = None
+        st.session_state.full_cfg = None
         st.warning(
             f"The automatic analysis did not complete ({type(exc).__name__}: {exc}). "
             "Press Run full analysis to retry."
@@ -471,21 +478,43 @@ _boot.empty()
 if st.session_state.full is not None and not isinstance(st.session_state.full, Artifacts):
     st.session_state.full = None
     st.session_state.full_key = None
+    st.session_state.full_cfg = None
     st.info("The analysis code changed since the last run. Press Run full analysis again.")
 
-art: Artifacts = (
-    st.session_state.full
-    if st.session_state.full is not None and st.session_state.full_key == key
-    else art_quick
-)
+# Which run the page is showing. Changing an input used to drop straight back to
+# the quick analysis, so every Monte Carlo figure - Detection, Assimilation,
+# Economics - vanished and was replaced by "Not computed" until the user found
+# the Run button. Moving one slider emptied most of the app.
+#
+# The last full run is kept on screen instead. It is real, it is reproducible,
+# and it is better than a blank page; what it is not is a result for the inputs
+# now in the sidebar, so everything that describes it - the banner, the tab
+# captions and the reproducibility stamp - describes the run that produced it,
+# not the sidebar.
+_have_full = st.session_state.full is not None
+_stale = _have_full and st.session_state.full_key != key
+art: Artifacts = st.session_state.full if _have_full else art_quick
+#: The configuration the displayed figures were actually computed from.
+shown_cfg: AnalysisConfig = st.session_state.get("full_cfg") if _have_full else cfg
+if shown_cfg is None:
+    shown_cfg = cfg
 results = evaluate_all(art)
 by_id = {r.claim_id: r for r in results}
 
+if _stale:
+    st.warning(
+        "**These figures are from the previous run.** They are real results, but for the "
+        "inputs used when the analysis was last run, not the ones now in the sidebar. "
+        "Press **Re-run with the new inputs** to update them. The reproducibility stamp "
+        "on the Ledger tab describes the run shown here, not the sidebar.",
+        icon=":material/history:",
+    )
+
 STAMP = build_stamp(
-    seed=cfg.seed,
+    seed=shown_cfg.seed,
     geometry_digest=TABLES.digest,
     geometry_retrieved=str(OC4_CITATION.retrieved),
-    ljf_model=cfg.ljf_model.value,
+    ljf_model=shown_cfg.ljf_model.value,
     shell_fe_digest="not shipped" if not art.shell_fe_available else "shipped",
     tide_source=f"{art.tide_provenance} placeholder"
     if art.tide_provenance != "MEASURED"
