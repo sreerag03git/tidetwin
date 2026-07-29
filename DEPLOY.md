@@ -73,41 +73,16 @@ the *repository root* `requirements.txt` rather than TideTwin's, and that
 `sys.path`, so imports resolve either way, but the dependency ambiguity is real.
 Splitting removes it.
 
-```bash
-git init -b main
-```
-
-```bash
-git add .
-```
-
-```bash
-git commit -m "TideTwin: adversarial test bench for the tidal calibration claims"
-```
-
-Confirm the secrets file is not staged — it must never be committed:
-
-```bash
-git ls-files --error-unmatch .streamlit/secrets.toml
-```
-
-That command should **fail** with "did not match any file". If it succeeds, stop
-and remove the file from the index.
-
 ---
 
-## 3. First push
-
-Create an empty repository on GitHub (no README, no licence — this directory has
-both), then:
+## 3. Check nothing sensitive is published
 
 ```bash
-git remote add origin https://github.com/<you>/tidetwin.git
+git ls-files | grep -i secret
 ```
 
-```bash
-git push -u origin main
-```
+That should print **nothing**. `.streamlit/secrets.toml` is in `.gitignore` and
+must never be committed.
 
 ---
 
@@ -120,7 +95,7 @@ git push -u origin main
    - Repository: `<you>/tidetwin`
    - Branch: `main`
    - Main file path: `app.py`
-   - Python version: **3.11** (matches `runtime.txt`)
+   - Python version: **3.12** (must match `runtime.txt`)
 4. Open **Advanced settings** before deploying and paste the secrets block from
    step 5.
 5. **Deploy**.
@@ -234,8 +209,8 @@ can be MEASURED — and the report says so on every claim that uses them.
 ## Troubleshooting
 
 **Build fails installing `scipy` or `pandas`.** Check `runtime.txt` says
-`python-3.11` and that Advanced settings matched it. The pins in
-`requirements.txt` are tested on 3.11.
+`python-3.12` and that Advanced settings matched it. numpy and scipy are pinned
+to versions that require Python >= 3.12, so 3.11 cannot resolve them.
 
 **App exceeds the 1 GB limit.** You have almost certainly installed
 `requirements-data.txt` on the cloud. `pyTMD` and `netCDF4` belong on a local

@@ -88,8 +88,81 @@ def test_secrets_are_not_committed():
 
 def test_requirements_are_pinned_exactly():
     """A claims ledger that cannot be reproduced is not evidence."""
+    for name, version in _pins():
+        assert version, f"'{name}' is not pinned to an exact version"
+
+
+def _pins() -> list[tuple[str, str]]:
+    import re
+
+    out = []
     for line in (ROOT / "requirements.txt").read_text("utf-8").splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or line.startswith("-r"):
             continue
-        assert "==" in line, f"'{line}' is not pinned to an exact version"
+        m = re.match(r"^([A-Za-z0-9._-]+)==([^\s;]+)", line)
+        assert m, f"'{line}' is not an exact pin"
+        out.append((m.group(1), m.group(2)))
+    return out
+
+
+def _runtime_python() -> tuple[int, int]:
+    text = (ROOT / "runtime.txt").read_text("utf-8").strip()
+    assert text.startswith("python-"), f"runtime.txt should read 'python-X.Y', got '{text}'"
+    major, minor = text.removeprefix("python-").split(".")[:2]
+    return int(major), int(minor)
+
+
+def test_runtime_python_is_declared_consistently():
+    """runtime.txt, pyproject and CI must agree, or the build resolves differently
+    from anything that was tested."""
+    py = _runtime_python()
+    declared = f"{py[0]}.{py[1]}"
+
+    pyproject = (ROOT / "pyproject.toml").read_text("utf-8")
+    assert f'requires-python = ">={declared}"' in pyproject, (
+        f"pyproject.toml does not require >={declared}"
+    )
+
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8")
+    for line in ci.splitlines():
+        if "python-version:" in line and not line.strip().startswith("#"):
+            assert declared in line, (
+                f"CI pins {line.strip()} but runtime.txt says {declared}"
+            )
+
+
+def test_every_pin_supports_the_declared_python():
+    """The bug this guards: numpy==2.5.1 needs Python >= 3.12 while runtime.txt
+    said python-3.11, so Streamlit Cloud could not resolve the requirements at
+    all and the deploy failed before the app ever started.
+
+    Uses the metadata of the installed distributions, so it needs no network. A
+    pin whose exact version is not installed here is skipped, and the test fails
+    if that leaves it checking nothing.
+    """
+    from importlib.metadata import PackageNotFoundError, distribution
+    from packaging.specifiers import SpecifierSet
+
+    py = _runtime_python()
+    version_str = f"{py[0]}.{py[1]}.0"
+    checked = 0
+    for name, pinned in _pins():
+        try:
+            dist = distribution(name)
+        except PackageNotFoundError:
+            continue
+        if dist.version != pinned:
+            continue
+        requires = dist.metadata.get("Requires-Python")
+        checked += 1
+        if not requires:
+            continue
+        assert SpecifierSet(requires).contains(version_str), (
+            f"{name}=={pinned} requires Python {requires}, which excludes the "
+            f"{'.'.join(map(str, py))} declared in runtime.txt"
+        )
+    assert checked >= 3, (
+        f"only {checked} pinned packages were installed here, so this test proved "
+        "almost nothing; install requirements.txt to make it meaningful"
+    )
