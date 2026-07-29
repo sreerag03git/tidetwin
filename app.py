@@ -56,7 +56,6 @@ from tidetwin.ui import (
     dataframe,
     figure_block,
     claims_strip,
-    hero_result,
     inject_theme,
     panel,
     loading_screen,
@@ -531,56 +530,11 @@ masthead(
 c3 = by_id["C3"]
 CLAIMED_SIGNATURE = 11.1
 
-if art.c3 is not None:
-    _n = art.c3
-    _cv = _n.effective_cv * 100
-    _be = _n.break_even.factor if getattr(_n, "break_even", None) else float("nan")
-    _headline = (
-        "Environmental variation alone moves the strain ratio by more than the crack "
-        "is claimed to. The method as specified does not achieve reliable detection."
-        if c3.status is Status.FAIL
-        else "The nuisance floor sits below the claimed damage signature by the required "
-             "margin."
-    )
-    hero_result(
-        eyebrow=f"Headline finding  ·  C3, the deciding test  ·  {c3.status.value}",
-        headline=_headline,
-        body=(
-            f"Measured against the paper's own claimed {CLAIMED_SIGNATURE:.1f} percent "
-            "signature, so this verdict does not depend on how the crack was modelled "
-            "here. The same verdict holds at all six real tidal regimes tested, and the "
-            "Monte Carlo is converged."
-        ),
-        colour=c3.status.colour,
-        facts=[
-            (f"{_cv:.1f}%", "nuisance dispersion, of the intact ratio"),
-            (f"{CLAIMED_SIGNATURE:.1f}%", "damage signature the paper claims"),
-            (f"{_cv / CLAIMED_SIGNATURE:.2f}×", "noise ÷ signal  (limit 0.33)"),
-            (f"{_be:.2f}×" if np.isfinite(_be) else "never",
-             "how much quieter the sea must be to pass"),
-        ],
-    )
-else:
-    hero_result(
-        eyebrow="C3, the deciding test",
-        headline="Does environmental variation move the strain ratio as much as a crack "
-                 "does?",
-        body="If it does, the other eight claims do not matter. Press "
-             "<b>Re-run with current inputs</b> to compute it.",
-        colour=c3.status.colour,
-        facts=[],
-    )
-
-with panel("Method diagram"):
-    st.markdown(
-        method_chain_svg(
-            nuisance_pct=(art.c3.effective_cv * 100) if art.c3 is not None else None,
-            signature_pct=CLAIMED_SIGNATURE,
-            verdict=c3.status.value if art.c3 is not None else "",
-        ),
-        unsafe_allow_html=True,
-    )
-
+# The C3 verdict used to occupy a full-width banner here, above everything, on
+# every tab. It is still the load-bearing result and it is still stated plainly -
+# in the scoreboard below, first in the claims strip, and in full on Detection -
+# but it no longer crowds out the rest of the app before a reader has seen any of
+# it. That placement was the author's call and this is the author's revision.
 top = st.columns([1, 1, 1, 2])
 top[0].metric("Claims supported", sum(r.status is Status.PASS for r in results))
 top[1].metric("Claims refuted", sum(r.status is Status.FAIL for r in results))
@@ -635,6 +589,80 @@ with TABS[0]:
             for c in CLAIMS
         ])
         provenance_legend()
+
+        # This page used to be nothing but text: a claims strip, a legend and a
+        # stack of collapsed expanders. Every one of the twenty-six figures was
+        # on another tab, so the first thing anyone saw was a wall of prose with
+        # gaps in it, and the reasonable conclusion was that the app had no
+        # graphs. The two results that carry the report are now drawn here, on
+        # arrival, with the method diagram between them.
+        section("How the method is supposed to work",
+                "tide to strain to ratio, and where a crack would enter")
+        with panel("Method diagram"):
+            st.markdown(
+                method_chain_svg(
+                    nuisance_pct=(art.c3.effective_cv * 100) if art.c3 is not None else None,
+                    signature_pct=CLAIMED_SIGNATURE,
+                    verdict=c3.status.value if art.c3 is not None else "",
+                ),
+                unsafe_allow_html=True,
+            )
+
+        if art.c3 is not None and art.c2_stiffness is not None:
+            section("The two results the report rests on",
+                    "both computed here; both shown in full on the Detection tab")
+            gcol = st.columns(2)
+            with gcol[0]:
+                _n, _sig = art.c3, 0.111
+                _b = _n.baseline_ratio
+                fig = go.Figure()
+                fig.add_histogram(x=_n.joint_samples, nbinsx=60, marker_color="#35b6c4")
+                fig.add_vline(x=_b, line_color="#111418", line_width=2)
+                for _s in (+1, -1):
+                    fig.add_vline(x=_b * (1 + _s * _sig), line_color="#b3261e",
+                                  line_dash="dash", line_width=2)
+                fig.update_layout(
+                    title="C3 · with no crack, where the sea alone puts the ratio",
+                    xaxis_title="intact strain ratio (dashed = the claimed crack step)",
+                    yaxis_title="draws", showlegend=False, margin=dict(t=54, b=40),
+                )
+                figure_block(fig, "overview_c3", height=330)
+                st.caption(
+                    f"**{_n.false_alarm_fraction(_sig) * 100:.0f} % of draws with no damage "
+                    "at all** already move the ratio by as much as a crack is claimed to. "
+                    "The dashed lines and the histogram overlap; that overlap is the finding."
+                )
+            with gcol[1]:
+                _sr = art.c2_stiffness
+                fig = go.Figure()
+                for _k, _arr in _sr.ratios_by_mode.items():
+                    fig.add_scatter(x=_sr.reductions * 100, y=_sr.change(_k) * 100,
+                                    name=MODE_SETS[_k].label, mode="lines",
+                                    line=dict(width=3 if _k == _sr.best_mode else 1.5,
+                                              dash=None if _k == _sr.best_mode else "dot"))
+                fig.add_hline(y=_sr.claimed_signature * 100, line_color="#b3261e",
+                              line_dash="dash")
+                fig.add_vline(x=10.0, line_color="#b3261e", line_dash="dot")
+                fig.update_layout(
+                    title="C2 · what the paper's own 10 % stiffness step actually does",
+                    xaxis_title="joint stiffness removed, %",
+                    yaxis_title="change in the strain ratio, %",
+                    legend=dict(orientation="h", y=-0.3), margin=dict(t=54, b=40),
+                )
+                figure_block(fig, "overview_c2", height=330)
+                st.caption(
+                    f"The paper's own intermediate step gives "
+                    f"**{_sr.at_claimed_reduction * 100:+.3f} %** against a claimed "
+                    f"**+{_sr.claimed_signature * 100:.1f} %** - short by a factor of "
+                    f"{abs(_sr.claimed_signature / _sr.at_claimed_reduction):.0f}, with no "
+                    "crack model involved."
+                )
+            st.caption(
+                "Every other figure lives on the tab it belongs to: the jacket and the "
+                "animated tidal cycle on **Structure**, the tides on **Environment**, the "
+                "gauge signals on **Sensing**, the full C2 and C3 workings on **Detection**, "
+                "the filters on **Assimilation**, and the cost model on **Economics**."
+            )
 
         section("Claims ledger", "the full statement and verdict for each")
         rows = []
