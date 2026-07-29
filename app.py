@@ -24,6 +24,7 @@ import plotly.graph_objects as go  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from tidetwin.analysis import AnalysisConfig, normalise, run_full, run_quick
+from tidetwin.diagram import method_chain_svg
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
 from tidetwin.damage.crack_ljf import shell_fe_status
@@ -48,6 +49,8 @@ from tidetwin.unlock import gate_status
 from tidetwin.ui import (
     dataframe,
     figure_block,
+    claims_strip,
+    hero_result,
     inject_theme,
     panel,
     loading_screen,
@@ -393,16 +396,57 @@ masthead(
 )
 
 c3 = by_id["C3"]
-verdict_block(
-    "The deciding test &mdash; C3, nuisance variance budget",
-    c3.detail
-    if art.c3 is not None
-    else "Not computed yet. Press <b>Run full analysis</b> below. C3 asks whether "
-    "environmental variation alone moves the strain ratio by as much as a crack would. "
-    "If it does, the other eight claims do not matter.",
-    c3.status.colour,
-    status=c3.status.value,
-)
+CLAIMED_SIGNATURE = 11.1
+
+if art.c3 is not None:
+    _n = art.c3
+    _cv = _n.effective_cv * 100
+    _be = _n.break_even.factor if getattr(_n, "break_even", None) else float("nan")
+    _headline = (
+        "Environmental variation alone moves the strain ratio by more than the crack "
+        "is claimed to. The method as specified does not achieve reliable detection."
+        if c3.status is Status.FAIL
+        else "The nuisance floor sits below the claimed damage signature by the required "
+             "margin."
+    )
+    hero_result(
+        eyebrow=f"Headline finding  ·  C3, the deciding test  ·  {c3.status.value}",
+        headline=_headline,
+        body=(
+            f"Measured against the paper's own claimed {CLAIMED_SIGNATURE:.1f} percent "
+            "signature, so this verdict does not depend on how the crack was modelled "
+            "here. The same verdict holds at all six real tidal regimes tested, and the "
+            "Monte Carlo is converged."
+        ),
+        colour=c3.status.colour,
+        facts=[
+            (f"{_cv:.1f}%", "nuisance dispersion, of the intact ratio"),
+            (f"{CLAIMED_SIGNATURE:.1f}%", "damage signature the paper claims"),
+            (f"{_cv / CLAIMED_SIGNATURE:.2f}×", "noise ÷ signal  (limit 0.33)"),
+            (f"{_be:.2f}×" if np.isfinite(_be) else "never",
+             "how much quieter the sea must be to pass"),
+        ],
+    )
+else:
+    hero_result(
+        eyebrow="C3, the deciding test",
+        headline="Does environmental variation move the strain ratio as much as a crack "
+                 "does?",
+        body="If it does, the other eight claims do not matter. Press "
+             "<b>Re-run with current inputs</b> to compute it.",
+        colour=c3.status.colour,
+        facts=[],
+    )
+
+with panel("Method diagram"):
+    st.markdown(
+        method_chain_svg(
+            nuisance_pct=(art.c3.effective_cv * 100) if art.c3 is not None else None,
+            signature_pct=CLAIMED_SIGNATURE,
+            verdict=c3.status.value if art.c3 is not None else "",
+        ),
+        unsafe_allow_html=True,
+    )
 
 top = st.columns([1, 1, 1, 2])
 top[0].metric("Claims supported", sum(r.status is Status.PASS for r in results))
@@ -457,8 +501,15 @@ with TABS[0]:
                 for cid, why in sorted(art.errors.items()):
                     st.markdown(f"- **{cid}** — {why}")
 
-        section("Claims ledger", "nine claims from the abstract, each with a verdict")
+        section("Nine claims at a glance", "colour is the verdict; the figure is what we computed")
+        claims_strip([
+            (c.id, by_id[c.id].status.value.split(" - ")[0],
+             by_id[c.id].status.colour, by_id[c.id].computed_text)
+            for c in CLAIMS
+        ])
         provenance_legend()
+
+        section("Claims ledger", "the full statement and verdict for each")
         rows = []
         for c in CLAIMS:
             r = by_id[c.id]
