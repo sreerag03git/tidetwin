@@ -32,7 +32,7 @@ from ...nuisance import ratio_from_series
 from ...response import build_response_surface, strain_series
 
 __all__ = ["DamageGrid", "damage_sensitivity_grid", "damage_signature",
-           "StiffnessReductionResult", "stiffness_reduction_test"]
+           "StiffnessReductionResult", "stiffness_reduction_test", "ModeSet", "MODE_SETS"]
 
 
 @dataclass
@@ -176,6 +176,30 @@ def damage_sensitivity_grid(
     )
 
 
+@dataclass(frozen=True)
+class ModeSet:
+    """One reading of the phrase "10 percent joint stiffness reduction"."""
+
+    key: str
+    label: str
+    #: Which of the three LJF springs this reading softens.
+    axial: bool
+    ipb: bool
+    opb: bool
+
+
+#: The abstract states a stiffness reduction without saying which stiffness. A
+#: cracked chord wall softens all three local springs, but not equally, and they
+#: do not push the strain ratio the same way. Every reading is swept and the one
+#: most favourable to the claim is the one judged.
+MODE_SETS: dict[str, ModeSet] = {
+    "axial": ModeSet("axial", "the axial spring alone", True, False, False),
+    "ipb": ModeSet("ipb", "in-plane bending alone", False, True, False),
+    "opb": ModeSet("opb", "out-of-plane bending alone", False, False, True),
+    "all": ModeSet("all", "all three springs together", True, True, True),
+}
+
+
 @dataclass
 class StiffnessReductionResult:
     """The abstract's own intermediate step, tested directly.
@@ -189,51 +213,153 @@ class StiffnessReductionResult:
     """
 
     reductions: np.ndarray
-    ratios: np.ndarray
+    #: Ratio against reduction, one curve per mode set. Keys are the members of
+    #: :data:`MODE_SETS`.
+    ratios_by_mode: dict[str, np.ndarray]
     intact_ratio: float
     claimed_intact: float
     claimed_damaged: float
     claimed_signature: float
     joint_id: int
     brace_member: int
+    springs: dict[str, float]
+
+    def change(self, mode: str) -> np.ndarray:
+        """Signed fractional ratio change against reduction, for one mode set."""
+        return (self.ratios_by_mode[mode] - self.intact_ratio) / self.intact_ratio
+
+    @property
+    def change_by_mode(self) -> dict[str, float]:
+        """Signed ratio change at the paper's stated 10 percent, per mode set."""
+        i = int(np.argmin(np.abs(self.reductions - 0.10)))
+        return {m: float(self.change(m)[i]) for m in self.ratios_by_mode}
+
+    @property
+    def claimed_direction(self) -> float:
+        """+1 if the claim says the ratio rises with damage, -1 if it falls.
+
+        The claim is directional: 1.800 to 2.000 is an *increase*. A reduction
+        that moves the ratio down by 11 percent has not reproduced it.
+        """
+        return 1.0 if self.claimed_damaged >= self.claimed_intact else -1.0
+
+    @property
+    def best_mode(self) -> str:
+        """The mode set most favourable to the claim.
+
+        The abstract says "10 percent stiffness reduction" without naming a mode,
+        so the fair test is the reading that helps the claim most, not the one
+        that happens to be easiest to compute. That turns out to matter: the
+        axial spring alone moves the ratio the *wrong way*, while out-of-plane
+        bending moves it the right way and about twelve times as far. Judging on
+        the axial spring would have overstated the case against the paper.
+
+        "Most favourable" means the largest movement *towards* the claimed value.
+        If no reading moves the right way at all, the largest movement of any
+        kind is reported instead - and that fact is itself in the verdict.
+        """
+        by = self.change_by_mode
+        d = self.claimed_direction
+        toward = {m: v for m, v in by.items() if v * d > 0}
+        pool = toward or by
+        return max(pool, key=lambda m: pool[m] * d if toward else abs(pool[m]))
+
+    @property
+    def any_mode_moves_the_claimed_way(self) -> bool:
+        d = self.claimed_direction
+        return any(v * d > 0 for v in self.change_by_mode.values())
+
+    @property
+    def ratios(self) -> np.ndarray:
+        """The most claim-favourable curve."""
+        return self.ratios_by_mode[self.best_mode]
 
     @property
     def at_claimed_reduction(self) -> float:
-        """Fractional ratio change at the stiffness reduction the paper states."""
-        i = int(np.argmin(np.abs(self.reductions - 0.10)))
-        return float((self.ratios[i] - self.intact_ratio) / self.intact_ratio)
+        """Ratio change at the paper's stated 10 percent, on its best mode."""
+        return self.change_by_mode[self.best_mode]
+
+    def _required(self, mode: str) -> float:
+        """Reduction that first reaches the claimed change, for one mode set.
+
+        The curves are not guaranteed monotonic - the axial and out-of-plane
+        contributions oppose each other, so a combined sweep can turn over - and
+        ``np.interp`` silently returns nonsense on non-monotonic input. This walks
+        the curve and interpolates only across the bracketing interval.
+        """
+        # Signed, not absolute: a reduction that drives the ratio 11 percent the
+        # *wrong* way has not reproduced a claim that it rises from 1.800 to 2.000.
+        change = self.change(mode) * self.claimed_direction
+        target = self.claimed_signature
+        hits = np.nonzero(change >= target)[0]
+        if hits.size == 0:
+            return float("nan")
+        i = int(hits[0])
+        if i == 0:
+            return float(self.reductions[0])
+        c0, c1 = float(change[i - 1]), float(change[i])
+        r0, r1 = float(self.reductions[i - 1]), float(self.reductions[i])
+        if c1 == c0:
+            return r1
+        return r0 + (target - c0) * (r1 - r0) / (c1 - c0)
 
     @property
     def required_reduction_for_claim(self) -> float:
-        """Stiffness reduction that would actually produce the claimed 11.1 percent.
+        """Smallest reduction, over every mode set, that reaches the claim.
 
-        ``nan`` if no reduction on the swept range gets there - which is itself
-        the finding, since the range runs to complete loss of the joint spring.
+        ``nan`` if no reduction of any mode on the swept range gets there - and
+        the range runs to 99 percent, the practically complete loss of the joint.
         """
-        change = np.abs((self.ratios - self.intact_ratio) / self.intact_ratio)
-        if not np.any(change >= self.claimed_signature):
-            return float("nan")
-        return float(np.interp(self.claimed_signature, change, self.reductions))
+        vals = [self._required(m) for m in self.ratios_by_mode]
+        finite = [v for v in vals if np.isfinite(v)]
+        return min(finite) if finite else float("nan")
+
+    @property
+    def required_mode(self) -> str | None:
+        """Which mode set reaches the claim first, if any does."""
+        best, mode = float("inf"), None
+        for m in self.ratios_by_mode:
+            v = self._required(m)
+            if np.isfinite(v) and v < best:
+                best, mode = v, m
+        return mode
 
     @property
     def verdict(self) -> str:
         got = self.at_claimed_reduction
         need = self.required_reduction_for_claim
+        by = self.change_by_mode
         head = (
             f"A {self.claimed_signature * 100:.1f} percent ratio change is claimed for a 10 "
-            f"percent joint stiffness reduction. Imposing exactly that reduction gives "
-            f"{got * 100:.3f} percent."
+            f"percent joint stiffness reduction. The abstract does not say which stiffness, "
+            f"so all four readings were swept and the one most favourable to the claim is "
+            f"reported: {MODE_SETS[self.best_mode].label} gives {got * 100:+.3f} percent, a "
+            f"factor of {abs(self.claimed_signature / got):.0f} short."
         )
+        if not self.any_mode_moves_the_claimed_way:
+            head += (
+                " No reading moves the ratio in the claimed direction at all, so the figure "
+                "above is the largest movement of any kind, not a movement towards 2.000."
+            )
+        elif min(by.values()) < 0 < max(by.values()):
+            head += (
+                " The modes work against each other - reducing the axial spring moves the "
+                "ratio down while out-of-plane bending moves it up - so no combined "
+                "reduction does better than the best single one."
+            )
         if not np.isfinite(need):
             return head + (
-                " Removing the joint spring entirely does not reach the claimed change, so "
-                "no stiffness reduction of any size produces it. The claimed sensitivity "
-                "does not follow from the structural mechanics, independently of how the "
-                "crack itself is modelled."
+                " Removing the joint spring entirely, in any mode, does not reach the "
+                "claimed change, so no stiffness reduction of any size produces it. The "
+                "claimed sensitivity does not follow from the structural mechanics, "
+                "independently of how the crack itself is modelled."
             )
+        m = self.required_mode
         return head + (
-            f" Reaching {self.claimed_signature * 100:.1f} percent would need a "
-            f"{need * 100:.0f} percent stiffness reduction, not 10 percent."
+            f" The claimed change is reachable, but only at a {need * 100:.0f} percent "
+            f"reduction in {MODE_SETS[m].label} - the practically complete loss of that "
+            "spring, not the 10 percent the paper attributes to a 20 percent through-wall "
+            "crack."
         )
 
 
@@ -273,32 +399,44 @@ def stiffness_reduction_test(
     )
     t = np.arange(0.0, record_days * 86400.0, 1800.0)
 
-    def ratio_for(reduction: float) -> float:
+    k = shell_ljf(_joint_geometry(tables, brace_member, joint_id))
+
+    def ratio_for(reduction: float, ms: ModeSet) -> float:
         # Compliance in series: removing a fraction f of the stiffness means the
         # remaining stiffness is (1-f)k, i.e. an added compliance of f/((1-f)k).
         if reduction <= 0.0:
             extra = None
         else:
-            geom = _joint_geometry(tables, brace_member, joint_id)
-            k = shell_ljf(geom).k_axial
             f = min(reduction, 0.999)
-            extra = {brace_member: (f / ((1.0 - f) * k), 0.0, 0.0)}
+            soften = lambda kk: f / ((1.0 - f) * kk)  # noqa: E731
+            extra = {brace_member: (
+                soften(k.k_axial) if ms.axial else 0.0,
+                soften(k.k_ipb) if ms.ipb else 0.0,
+                soften(k.k_opb) if ms.opb else 0.0,
+            )}
         b = build_jacket(ljf_model=ljf_model, crack_compliance=extra, tables=tables)
         s = build_response_surface(b, pair, cfg, n_theta=n_theta,
                                    eta_levels=np.linspace(-2, 2, 3))
         eu, el = strain_series(s, t, constituents)
         return ratio_from_series(t, eu, el)
 
-    ratios = np.array([ratio_for(float(r)) for r in reductions])
+    # The intact frame is the same for every mode set; solve it once.
+    intact = ratio_for(0.0, MODE_SETS["all"])
+    ratios_by_mode = {
+        key: np.array([intact if r <= 0.0 else ratio_for(float(r), ms)
+                       for r in reductions])
+        for key, ms in MODE_SETS.items()
+    }
     return StiffnessReductionResult(
         reductions=reductions,
-        ratios=ratios,
-        intact_ratio=float(ratios[0]),
+        ratios_by_mode=ratios_by_mode,
+        intact_ratio=float(intact),
         claimed_intact=claimed_intact,
         claimed_damaged=claimed_damaged,
         claimed_signature=abs(claimed_damaged - claimed_intact) / claimed_intact,
         joint_id=joint_id,
         brace_member=int(brace_member),
+        springs={"axial": float(k.k_axial), "ipb": float(k.k_ipb), "opb": float(k.k_opb)},
     )
 
 

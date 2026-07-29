@@ -23,6 +23,7 @@ from tidetwin.damage.newman_raju import (
     shape_factor_Q,
     sif,
 )
+from tidetwin.claims.tests.c2_damage import MODE_SETS, StiffnessReductionResult
 from tidetwin.damage.paris import load_constants, paris_status
 from tidetwin.damage.sn import load_curve, sn_status
 from tidetwin.provenance import DataUnavailable
@@ -163,3 +164,94 @@ def test_paris_gate_warns_about_units():
     """A units slip here would be wrong by orders of magnitude, silently."""
     _ok, why = paris_status()
     assert "units" in why.lower()
+
+
+# ---------------------------------------------------------------------------
+# The stiffness-reduction test carries the C2 verdict, so its judgement logic is
+# pinned here on hand-built curves. These check the reasoning, not the physics:
+# the physics is one integration test at the end.
+
+
+def _result(**curves) -> StiffnessReductionResult:
+    """Build a result from explicit change-fraction curves, for logic tests."""
+    reductions = np.array([0.0, 0.10, 0.50, 0.99])
+    intact = 2.0
+    return StiffnessReductionResult(
+        reductions=reductions,
+        ratios_by_mode={k: intact * (1.0 + np.asarray(v, float)) for k, v in curves.items()},
+        intact_ratio=intact,
+        claimed_intact=1.800,
+        claimed_damaged=2.000,
+        claimed_signature=0.111,
+        joint_id=5,
+        brace_member=1,
+        springs={"axial": 1e10, "ipb": 1e9, "opb": 1e8},
+    )
+
+
+def test_the_claim_is_judged_on_its_most_favourable_reading():
+    """The abstract never says which stiffness, so the best case must be judged.
+
+    This is not a detail. The axial spring alone moves the ratio the wrong way
+    while out-of-plane bending moves it the right way and much further, so
+    picking the axial reading would overstate the case against the paper by an
+    order of magnitude.
+    """
+    r = _result(
+        axial=[0.0, -0.0003, -0.003, -0.16],
+        opb=[0.0, +0.0037, +0.027, +0.122],
+        all=[0.0, +0.0036, +0.026, -0.019],
+    )
+    assert r.best_mode == "opb"
+    assert r.at_claimed_reduction == pytest.approx(0.0037)
+
+
+def test_a_large_change_the_wrong_way_does_not_count_as_favourable():
+    """The claim is directional: 1.800 to 2.000 is a rise.
+
+    A reduction that drives the ratio 5 percent *down* has not partially
+    reproduced a claimed 11.1 percent rise, so the tiny mode that at least moves
+    the right way is the one the claim is judged on.
+    """
+    r = _result(axial=[0.0, -0.05, -0.1, -0.2], opb=[0.0, +0.001, 0.002, 0.003])
+    assert r.best_mode == "opb"
+    assert r.at_claimed_reduction == pytest.approx(0.001)
+
+
+def test_a_wrong_way_crossing_is_not_reported_as_reaching_the_claim():
+    """Reaching 11.1 percent downwards is not reaching 1.800 -> 2.000."""
+    r = _result(axial=[0.0, -0.05, -0.12, -0.30])
+    assert np.isnan(r.required_reduction_for_claim)
+    assert not r.any_mode_moves_the_claimed_way
+    assert "no reading moves the ratio in the claimed direction" in r.verdict.lower()
+
+
+def test_required_reduction_handles_a_curve_that_turns_over():
+    """Opposed modes make the combined curve non-monotonic.
+
+    ``np.interp`` returns silent nonsense on non-monotonic input, which would
+    have produced a fabricated "required reduction". The bracketing search must
+    find the first crossing instead.
+    """
+    r = _result(all=[0.0, 0.05, 0.20, -0.30])
+    got = r.required_reduction_for_claim
+    assert 0.10 < got < 0.50, got
+    assert r.required_mode == "all"
+
+
+def test_an_unreachable_claim_reports_unreachable_rather_than_extrapolating():
+    r = _result(axial=[0.0, 0.001, 0.002, 0.004], opb=[0.0, 0.001, 0.003, 0.005])
+    assert np.isnan(r.required_reduction_for_claim)
+    assert r.required_mode is None
+    assert "does not reach the claimed change" in r.verdict
+
+
+def test_the_verdict_says_when_the_modes_oppose_each_other():
+    r = _result(axial=[0.0, -0.01, -0.05, -0.2], opb=[0.0, +0.02, +0.06, +0.1])
+    assert "against each other" in r.verdict
+
+
+def test_the_verdict_quotes_the_shortfall_as_a_factor():
+    r = _result(opb=[0.0, 0.00370, 0.027, 0.122])
+    # 0.111 / 0.0037 = 30
+    assert "factor of 30" in r.verdict

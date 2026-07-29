@@ -34,6 +34,7 @@ from tidetwin.robustness import (
 )
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
+from tidetwin.claims.tests.c2_damage import MODE_SETS
 from tidetwin.damage.crack_ljf import shell_fe_status
 from tidetwin.damage.paris import paris_status
 from tidetwin.damage.sn import sn_status
@@ -970,6 +971,72 @@ with TABS[4]:
             unavailable_panel("Not computed", "Press Run full analysis to compute C2, C3 and C4.")
         else:
             section("C2 - damage sensitivity", "how much a crack moves the strain ratio")
+
+            # The paper's own intermediate step, tested directly. This is the
+            # primary evidence and is drawn first: it needs no crack model, so
+            # it cannot be answered by disputing how the crack was modelled.
+            sr = art.c2_stiffness
+            if sr is not None:
+                st.markdown(
+                    "**The paper's own intermediate step.** The abstract states that a 20 "
+                    "percent through-wall crack produces a **10 percent joint stiffness "
+                    "reduction**, and that this is what takes the ratio from 1.800 to 2.000. "
+                    "The second link is pure structural mechanics, so it can be tested "
+                    "exactly: impose the stated reduction, re-solve, read the ratio. No "
+                    "crack model and no shell-FE surface enter."
+                )
+                fig = go.Figure()
+                colours = {"axial": "#4a545e", "ipb": "#8a5300",
+                           "opb": "#1a7f43", "all": "#35b6c4"}
+                for key, arr in sr.ratios_by_mode.items():
+                    fig.add_trace(go.Scatter(
+                        x=sr.reductions * 100, y=sr.change(key) * 100,
+                        name=MODE_SETS[key].label, mode="lines+markers",
+                        line=dict(color=colours.get(key), width=3 if key == sr.best_mode else 2,
+                                  dash=None if key == sr.best_mode else "dot"),
+                    ))
+                fig.add_hline(
+                    y=sr.claimed_signature * 100, line_color="#b3261e", line_width=2,
+                    annotation_text=f"claimed {sr.claimed_signature * 100:.1f} %",
+                    annotation_position="top left",
+                )
+                fig.add_vline(
+                    x=10.0, line_color="#b3261e", line_dash="dash",
+                    annotation_text="the paper's 10 % reduction", annotation_position="top",
+                )
+                fig.update_layout(
+                    title=(f"Strain-ratio change against imposed joint stiffness reduction, "
+                           f"joint J{sr.joint_id}"),
+                    xaxis_title="joint stiffness removed, %",
+                    yaxis_title="change in the strain ratio, %",
+                    hovermode="x unified", legend=dict(orientation="h", y=-0.22),
+                )
+                figure_block(fig, "c2_stiffness_sweep", height=440)
+                st.caption(
+                    "The abstract does not say *which* stiffness, so all four readings are "
+                    "swept and the claim is judged on whichever helps it most (solid line). "
+                    "That matters: the axial spring moves the ratio the wrong way, while "
+                    "out-of-plane bending moves it the right way and roughly twelve times "
+                    "as far."
+                )
+                mc = st.columns(len(sr.change_by_mode))
+                for col, (key, val) in zip(mc, sr.change_by_mode.items()):
+                    with col:
+                        quantity(derived(
+                            val, "-",
+                            f"reduce {MODE_SETS[key].label}", [],
+                            "impose a 10 % reduction on that LJF spring and re-solve "
+                            "the frame; fractional change in the M2 strain ratio",
+                            note=("most favourable to the claim" if key == sr.best_mode
+                                  else ""),
+                        ))
+                st.markdown(f"**{sr.verdict}**")
+                st.divider()
+                st.caption(
+                    "Below: the independent crack-model route, retained as corroboration. "
+                    "It reaches the same conclusion from a completely different direction."
+                )
+
             g = art.c2
             fig = go.Figure(go.Contour(
                 x=g.surface_length_m * 1e3, y=g.a_over_T, z=np.abs(g.delta_fraction) * 100,
