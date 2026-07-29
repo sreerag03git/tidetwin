@@ -48,6 +48,7 @@ from tidetwin.ui import (
     dataframe,
     figure_block,
     inject_theme,
+    loading_screen,
     masthead,
     provenance_legend,
     quantity,
@@ -293,7 +294,16 @@ def _cfg_from_key(key: tuple) -> AnalysisConfig:
 
 cfg = sidebar()
 key = _cfg_key(cfg)
+
+# First load assembles the OC4 frame, factorises it and builds the response
+# surface: a few seconds of real work. Show what is happening instead of a blank
+# page, and clear it the moment the result is in.
+_boot = st.empty()
+if "booted" not in st.session_state:
+    _boot.markdown(loading_screen(), unsafe_allow_html=True)
 art_quick = _quick(key)
+st.session_state.booted = True
+_boot.empty()
 
 if "full" not in st.session_state:
     st.session_state.full = None
@@ -367,6 +377,16 @@ with top[3]:
         st.rerun()
     if st.session_state.full is not None and st.session_state.full_key != key:
         st.caption("Inputs changed since the last full run. Showing the quick pass.")
+
+if art.c3 is None:
+    st.info(
+        "**Available now:** Structure (3D jacket, modal shift), Environment (tidal "
+        "ellipses and forcing), Sensing (strain time series, harmonic amplitudes). "
+        "**Press Run full analysis** for the Monte Carlo work: the C2 damage contour, "
+        "the C3 nuisance budget and its convergence and break-even, C4 detection times, "
+        "C6 filter calibration, C8 economics and C9 probability of detection.",
+        icon=None,
+    )
 
 TABS = st.tabs(
     ["Overview", "Structure", "Environment", "Sensing", "Detection",
@@ -536,6 +556,61 @@ with TABS[2]:
         for name in ("M2", "S2"):
             quantity(assumed(PLACEHOLDER_CONSTITUENTS[name]["elev_amp"], "m",
                              f"{name} elevation amplitude"))
+
+    try:
+        _con = cfg.constituents()
+    except Exception:  # noqa: BLE001 - plots are a nicety, never a failure mode
+        _con = None
+
+    if _con is not None:
+        section("Tidal current ellipses",
+                "the shape that decides everything - see the C3 mechanism")
+        fig = go.Figure()
+        t_cyc = np.linspace(0.0, 2 * np.pi, 240)
+        for nm in _con.names:
+            i = _con.index(nm)
+            a, b = float(_con.semi_major[i]), float(_con.semi_minor[i])
+            inc = float(_con.inclination[i])
+            u = a * np.cos(inc) * np.cos(t_cyc) - b * np.sin(inc) * np.sin(t_cyc)
+            v = a * np.sin(inc) * np.cos(t_cyc) + b * np.cos(inc) * np.sin(t_cyc)
+            fig.add_scatter(x=u, y=v, name=nm, mode="lines",
+                            line=dict(width=3 if nm == "M2" else 1.5))
+        fig.update_layout(
+            title="Path traced by the tidal current over one cycle",
+            xaxis_title="eastward current, m/s", yaxis_title="northward current, m/s",
+            hovermode="closest", yaxis=dict(scaleanchor="x", scaleratio=1),
+        )
+        i = _con.index("M2")
+        ecc = abs(float(_con.semi_minor[i]) / float(_con.semi_major[i]))
+        figure_block(
+            fig, "tidal_ellipses",
+            f"M2 eccentricity {ecc:.3f}. A fat ellipse never goes slack and keeps the "
+            "strain ratio well conditioned; a flat one passes through zero twice a cycle "
+            "and the ratio degrades. This is the strongest predictor of the C3 nuisance "
+            "floor.", 420,
+        )
+
+        section("Tidal forcing over time", "what actually drives the structure")
+        t_s = np.arange(0.0, 14.0 * 86400.0, 600.0)
+        eta = _con.elevation(t_s)
+        uv = _con.depth_averaged_current(t_s)
+        speed = np.hypot(uv[:, 0], uv[:, 1])
+        fig = go.Figure()
+        fig.add_scatter(x=t_s / 86400.0, y=eta, name="water level, m")
+        fig.add_scatter(x=t_s / 86400.0, y=speed, name="current speed, m/s", yaxis="y2")
+        fig.update_layout(
+            title="Fourteen days of tidal elevation and current speed",
+            xaxis_title="time, days", yaxis_title="water level, m",
+            yaxis2=dict(title="current speed, m/s", overlaying="y", side="right",
+                        showgrid=False),
+        )
+        figure_block(
+            fig, "tidal_forcing",
+            f"Spring/neap ratio {_con.spring_neap_ratio():.2f}, form factor "
+            f"{_con.form_factor():.3f}. Drag scales with the square of speed, so the "
+            "current trace - not the water level - carries most of the structural signal.",
+            380,
+        )
 
     section("ERA5 metocean", "wind, waves and temperature from the Copernicus reanalysis")
     era5_ok, era5_why = credentials_status()

@@ -27,6 +27,9 @@ from .provenance import Provenance, Quantity
 
 __all__ = [
     "inject_theme",
+    "loading_screen",
+    "masthead",
+    "static_export_status",
     "quantity",
     "status_chip",
     "figure_block",
@@ -195,6 +198,63 @@ def inject_theme() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+_BOOT_CSS = f"""
+<style>
+.tt-boot {{
+  min-height: 62vh; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+  font-family:{SANS}; color:{INK};
+}}
+.tt-boot .mark {{
+  font-size:2.1rem; font-weight:680; letter-spacing:-.03em; margin-bottom:.2rem;
+}}
+.tt-boot .rule {{
+  width:3.2rem; height:2px; background:{INK}; margin:.55rem 0 .9rem;
+}}
+.tt-boot .say {{ color:{DIM}; font-size:.95rem; max-width:30rem; line-height:1.6; }}
+.tt-boot .step {{
+  font-family:{MONO}; font-size:.8rem; color:{ACCENT};
+  margin-top:1.5rem; letter-spacing:.02em;
+}}
+.tt-boot .bar {{
+  width:min(22rem, 70vw); height:2px; background:{LINE};
+  margin-top:.7rem; overflow:hidden; position:relative;
+}}
+.tt-boot .bar::after {{
+  content:""; position:absolute; inset:0; width:35%;
+  background:{ACCENT}; animation:ttslide 1.15s ease-in-out infinite;
+}}
+@keyframes ttslide {{
+  0% {{ transform:translateX(-100%); }}
+  100% {{ transform:translateX(320%); }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+  .tt-boot .bar::after {{ animation:none; width:100%; opacity:.35; }}
+}}
+</style>
+"""
+
+
+def loading_screen(step: str = "Assembling the jacket and solving the frame") -> str:
+    """Markup for the first-load screen.
+
+    Shown while the frame is assembled and solved, which is a real few seconds of
+    sparse linear algebra rather than an artificial delay. It names what it is
+    doing, so the wait is legible rather than a blank page.
+    """
+    return _BOOT_CSS + (
+        '<div class="tt-boot">'
+        '<div class="mark">TideTwin</div>'
+        '<div class="rule"></div>'
+        '<div class="say">An adversarial test bench for the claims of a tidal-calibration '
+        "fatigue digital twin. Every number is computed at runtime and carries its "
+        "provenance.</div>"
+        f'<div class="step">{step}</div>'
+        '<div class="bar"></div>'
+        "</div>"
+    )
+
+
 def masthead(subtitle: str) -> None:
     st.markdown(
         f'<div class="tt-head"><span class="name">TideTwin</span>'
@@ -298,12 +358,39 @@ def unavailable_panel(title: str, message: str, remedy: str = "") -> None:
     )
 
 
-def figure_block(fig: go.Figure, name: str, caption: str = "", height: int = 420) -> None:
-    """Render a figure with paper-ready download buttons.
+@st.cache_resource(show_spinner=False)
+def static_export_status() -> tuple[bool, str]:
+    """Can this deployment actually render a static image?
 
-    HTML export is always available. PNG at 300 dpi and vector PDF need
-    ``kaleido``; when it is absent the buttons say so rather than failing on
-    click.
+    Importing ``kaleido`` is not the question. Kaleido 1.x drives a headless
+    Chrome, and Streamlit Cloud has no Chrome binary, so the import succeeds and
+    ``to_image`` then raises at render time. This probes the real capability once
+    by rendering a trivial figure, and caches the answer for the session.
+    """
+    try:
+        import kaleido  # noqa: F401
+    except ImportError:
+        return False, "kaleido is not installed."
+    try:
+        go.Figure().to_image(format="png", width=8, height=8)
+        return True, "Static image export is available."
+    except Exception as exc:  # noqa: BLE001 - any failure means unavailable
+        msg = str(exc).strip().splitlines()
+        head = msg[0] if msg else type(exc).__name__
+        return False, (
+            "kaleido is installed but cannot render: it needs a Chrome binary, which "
+            f"this host does not provide ({head[:120]}). Interactive HTML export still "
+            "works and keeps full vector fidelity."
+        )
+
+
+def figure_block(fig: go.Figure, name: str, caption: str = "", height: int = 420) -> None:
+    """Render a figure, with paper-ready export offered only when it can work.
+
+    Static images are generated **on request**, never on page render. Generating
+    a PNG and a PDF for every figure on every rerun is slow, and if the renderer
+    is unavailable it takes down the whole tab - which is exactly what happened
+    on Streamlit Cloud, where kaleido imports but has no Chrome to drive.
     """
     fig.update_layout(template=PLOTLY_TEMPLATE, height=height)
     st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
@@ -311,51 +398,43 @@ def figure_block(fig: go.Figure, name: str, caption: str = "", height: int = 420
         st.caption(caption)
 
     with st.expander("Download this figure"):
-        cols = st.columns(3)
+        st.download_button(
+            "Interactive HTML (vector, keeps full resolution)",
+            fig.to_html(include_plotlyjs="cdn").encode(),
+            file_name=f"{name}.html",
+            mime="text/html",
+            key=f"dl_html_{name}",
+            width="stretch",
+        )
+        ok, why = static_export_status()
+        if not ok:
+            st.caption(f"PNG and PDF unavailable here. {why}")
+            return
+        if not st.checkbox(
+            "Prepare 300 dpi PNG and vector PDF",
+            key=f"dl_prep_{name}",
+            help="Rendered on demand, because generating them for every figure on every "
+            "rerun is slow.",
+        ):
+            return
+        try:
+            # 1005 px across a 3.35 in two-column figure is exactly 300 dpi.
+            png = fig.to_image(format="png", width=1005, height=int(height * 2.4), scale=1)
+            pdf = fig.to_image(format="pdf", width=241, height=int(height * 0.58))
+        except Exception as exc:  # noqa: BLE001 - degrade, never crash the tab
+            st.caption(f"Static export failed for this figure: {type(exc).__name__}: {exc}")
+            return
+        cols = st.columns(2)
         with cols[0]:
             st.download_button(
-                "HTML (interactive)",
-                fig.to_html(include_plotlyjs="cdn").encode(),
-                file_name=f"{name}.html",
-                mime="text/html",
-                key=f"dl_html_{name}",
-                width="stretch",
+                "PNG 300 dpi", png, file_name=f"{name}.png", mime="image/png",
+                key=f"dl_png_{name}", width="stretch",
             )
-        try:
-            import kaleido  # noqa: F401
-
-            ok = True
-        except ImportError:
-            ok = False
-        if ok:
-            # 1005 px across a 3.35 in two-column figure is exactly 300 dpi.
-            with cols[1]:
-                st.download_button(
-                    "PNG 300 dpi",
-                    fig.to_image(format="png", width=1005, height=int(height * 2.4), scale=1),
-                    file_name=f"{name}.png",
-                    mime="image/png",
-                    key=f"dl_png_{name}",
-                    width="stretch",
-                )
-            with cols[2]:
-                st.download_button(
-                    "PDF (vector)",
-                    fig.to_image(format="pdf", width=241, height=int(height * 0.58)),
-                    file_name=f"{name}.pdf",
-                    mime="application/pdf",
-                    key=f"dl_pdf_{name}",
-                    width="stretch",
-                )
-        else:
-            with cols[1]:
-                st.button(
-                    "PNG / PDF need kaleido",
-                    disabled=True,
-                    key=f"dl_nokaleido_{name}",
-                    width="stretch",
-                    help="pip install kaleido to enable 300 dpi PNG and vector PDF export",
-                )
+        with cols[1]:
+            st.download_button(
+                "PDF (vector)", pdf, file_name=f"{name}.pdf", mime="application/pdf",
+                key=f"dl_pdf_{name}", width="stretch",
+            )
 
 
 def dataframe(df, **kw) -> None:
