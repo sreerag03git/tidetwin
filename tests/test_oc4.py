@@ -252,3 +252,57 @@ def test_unshipped_published_coefficients_report_data_unavailable():
         load_tabulated("buitrago1993")
     assert "Buitrago" in exc.value.remedy
     assert exc.value.remedy  # must tell the user how to supply them
+
+
+# ---------------------------------------------------- modelling sensitivity
+
+
+def test_spread_factor_changes_the_joint_stiffness_monotonically():
+    """The one free choice in the shell derivation must be a real parameter."""
+    from tidetwin.fe.ljf import shell_ljf
+
+    g = JointGeometry(1.2, 0.035, 0.8, 0.02, np.radians(29.4))
+    ks = [shell_ljf(g, spread_factor=f).k_axial for f in (0.5, 1.0, 2.0)]
+    assert ks[0] < ks[1] < ks[2], "wider load spreading must stiffen the joint"
+    # And it must actually reach the frame, not just the stiffness function.
+    from tidetwin.geometry.oc4 import build_jacket
+
+    a = build_jacket(ljf_model=LJFModel.SHELL, ljf_spread_factor=0.5)
+    b = build_jacket(ljf_model=LJFModel.SHELL, ljf_spread_factor=2.0)
+    ka = a.model.assemble()[0].diagonal().sum()
+    kb = b.model.assemble()[0].diagonal().sum()
+    assert ka != kb, "spread_factor is not reaching the assembled stiffness"
+
+
+def test_ill_conditioned_configurations_are_excluded_from_the_spread():
+    """A ratio of two near-zero strains is undefined, not a large signal.
+
+    Reporting a min-to-max range over rows like that produced a 'spread of a
+    billion percent', which says nothing. They are excluded and counted.
+    """
+    from tidetwin.robustness import SensitivityRow, spread_summary, usability_summary
+
+    rows = [
+        SensitivityRow("J5", "deep", 1.90, 1.5),
+        SensitivityRow("J15", "deep", 2.10, 1.45),
+        SensitivityRow("J23", "above water", 2_138_901.0, 0.002),
+        SensitivityRow("J31", "above water", 1_550_582.0, 0.002),
+    ]
+    assert rows[0].well_conditioned and rows[1].well_conditioned
+    assert not rows[2].well_conditioned and not rows[3].well_conditioned
+    assert not rows[2].measurable
+
+    txt = spread_summary(rows)
+    assert "2 of 4 are excluded" in txt
+    assert "billion" not in txt
+    assert "1.9000" in txt and "2.1000" in txt
+
+    use = usability_summary(rows)
+    assert "2 of 4" in use
+
+
+def test_spread_summary_says_so_when_nothing_is_usable():
+    from tidetwin.robustness import SensitivityRow, spread_summary
+
+    rows = [SensitivityRow("J23", "above water", 1e6, 0.001)]
+    assert "no meaningful spread" in spread_summary(rows)

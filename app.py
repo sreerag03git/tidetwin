@@ -25,6 +25,13 @@ import streamlit as st  # noqa: E402
 
 from tidetwin.analysis import AnalysisConfig, normalise, run_full, run_quick
 from tidetwin.diagram import method_chain_svg
+from tidetwin.robustness import (
+    FBG_RESOLUTION_USTRAIN,
+    joint_sensitivity,
+    ljf_sensitivity,
+    spread_summary,
+    usability_summary,
+)
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
 from tidetwin.damage.crack_ljf import shell_fe_status
@@ -278,6 +285,23 @@ def _quick(key: tuple) -> Artifacts:
 def _full(key: tuple) -> Artifacts:
     """The full claims analysis, cached on the inputs so it runs once."""
     return run_full(_cfg_from_key(key))
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def _sensitivity(key: tuple):
+    """LJF and joint sensitivity sweeps. Returns ([], []) rather than failing."""
+    cfg = _cfg_from_key(key)
+    try:
+        cfg, _notes = normalise(cfg)
+        con = cfg.constituents()
+        joints = tuple(sorted(brace_chord_joints(load_tables())))
+        return (
+            ljf_sensitivity(con, cfg.hydro(), joint_id=cfg.joint_id,
+                            offset_m=cfg.sensor_offset_m, n_theta=12),
+            joint_sensitivity(con, cfg.hydro(), joints, offset_m=0.4, n_theta=12),
+        )
+    except Exception:  # noqa: BLE001 - a sweep is a nicety, not a dependency
+        return [], []
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
@@ -687,6 +711,59 @@ with TABS[1]:
                 "RIGID joints selected",
                 "C2 and C7 are vacuous with rigid joints: there is no joint compliance for a "
                 "crack to change. Select SHELL to make them meaningful.",
+            )
+
+        section("How much do the modelling choices matter?",
+                "measured, not asserted - the spread is the honest precision")
+        with st.spinner("Sweeping joints and joint-flexibility models..."):
+            ljf_rows, joint_rows = _sensitivity(key)
+
+        if ljf_rows:
+            cols = st.columns([3, 2])
+            with cols[0]:
+                dataframe(pd.DataFrame([
+                    {"Configuration": r.label, "Strain ratio": round(r.ratio, 4),
+                     "M2 strain, ustrain": round(r.m2_amplitude_ustrain, 3),
+                     "Detail": r.detail}
+                    for r in ljf_rows
+                ]))
+            with cols[1]:
+                st.caption(spread_summary(ljf_rows))
+            st.caption(
+                "C1 turns out to be nearly insensitive to local joint flexibility, which "
+                "makes it a more robust number than expected. C2 and C7 are the opposite: "
+                "both are identically zero with rigid joints, because there is then no "
+                "joint compliance for a crack to change."
+            )
+
+        if joint_rows:
+            usable = [r for r in joint_rows if r.well_conditioned]
+            fig = go.Figure()
+            fig.add_scatter(
+                x=[r.m2_amplitude_ustrain for r in joint_rows],
+                y=[float(TABLES.joints.loc[int(r.label[1:]), "z_m"]) for r in joint_rows],
+                mode="markers+text", text=[r.label for r in joint_rows],
+                textposition="middle right", textfont=dict(size=9),
+                marker=dict(size=11,
+                            color=["#1a7f43" if r.well_conditioned else "#b3261e"
+                                   for r in joint_rows]),
+                name="braced joints",
+            )
+            fig.add_vline(x=FBG_RESOLUTION_USTRAIN, line_dash="dash", line_color="#b3261e",
+                          annotation_text="FBG resolution")
+            fig.add_hline(y=0.0, line_dash="dot", line_color="#5b646d",
+                          annotation_text="still water level")
+            fig.update_layout(
+                title="Where on the jacket is there a signal to measure at all?",
+                xaxis_title="M2 strain amplitude at the lower gauge, microstrain",
+                yaxis_title="joint elevation, m (SWL = 0)", xaxis_type="log",
+                hovermode="closest", showlegend=False,
+            )
+            figure_block(
+                fig, "joint_usability",
+                f"Green joints give a usable, well-conditioned ratio; red do not. "
+                f"{len(usable)} of {len(joint_rows)} qualify. " + usability_summary(joint_rows),
+                430,
             )
 
         if art.c7 is not None:
