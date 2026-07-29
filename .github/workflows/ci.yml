@@ -1,21 +1,12 @@
 name: CI
 
+# Paths are relative to the repository root, so this file assumes TideTwin IS
+# the repository. That is the standalone layout produced by
+# `git subtree split --prefix=tidetwin`; see DEPLOY.md section 2.
 on:
   push:
-    paths:
-      - "tidetwin/**"
-      - "tests/**"
-      - "data/**"
-      - "scripts/**"
-      - "app.py"
-      - "requirements*.txt"
-      - ".github/workflows/ci.yml"
   pull_request:
   workflow_dispatch:
-
-defaults:
-  run:
-    working-directory: tidetwin
 
 jobs:
   test:
@@ -28,7 +19,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: tidetwin/requirements.txt
+          cache-dependency-path: requirements.txt
 
       - name: Install
         run: |
@@ -76,7 +67,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: tidetwin/requirements.txt
+          cache-dependency-path: requirements.txt
 
       - name: Install
         run: |
@@ -98,7 +89,7 @@ jobs:
         with:
           name: claims-ledger
           path: |
-            tidetwin/ledger.csv
+            ledger.csv
 
       - name: Commit the regenerated README table
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -44,24 +44,34 @@ banner appears at the top of every tab; the expensive Monte Carlo waits behind
 
 ## 2. Initialise the repository
 
-TideTwin is self-contained in this directory, and there are two ways to deploy
-it. Both work; the first is cleaner.
+TideTwin is designed to be **its own repository**, with `requirements.txt`,
+`runtime.txt` and `.streamlit/config.toml` at the root where Streamlit Cloud
+looks for them. `.github/workflows/ci.yml` assumes that layout too.
 
-**Option A — its own repository (recommended).** `.streamlit/config.toml`,
-`requirements.txt` and `runtime.txt` then sit at the repository root, exactly
-where Streamlit Cloud looks for them. Follow the steps below as written.
+If TideTwin currently lives inside another repository as a `tidetwin/`
+subdirectory, extract it with history intact:
 
-**Option B — from the existing monorepo.** If `tidetwin/` stays inside
-`scr-fatigue-twin`, set the main file path to `tidetwin/app.py` in the Streamlit
-dashboard. `app.py` inserts its own directory on `sys.path`, so the imports
-resolve either way. Two things to watch:
+```bash
+git subtree split --prefix=tidetwin -b tidetwin-standalone
+```
 
-- Streamlit Cloud may pick up the **repository root** `requirements.txt`, which
-  belongs to the other application in that repo and pins different versions.
-  Check the build log; if it installed the wrong set, use Option A.
-- The root `.streamlit/config.toml` is a light theme for the other app. TideTwin
-  injects its own CSS so it still renders correctly, but the browser chrome
-  colour will come from the root config.
+That produces a branch whose root *is* TideTwin, carrying only the commits that
+touched it. Create an empty repository on GitHub (no README, no licence — this
+directory has both), then push that branch to it as `main`:
+
+```bash
+git push https://github.com/<you>/tidetwin.git tidetwin-standalone:main
+```
+
+Then clone it fresh and work there; steps 3 onwards assume you are in the
+standalone clone.
+
+**Deploying from a monorepo instead** is possible but not recommended: set the
+main file path to `tidetwin/app.py` and note that Streamlit Cloud may pick up
+the *repository root* `requirements.txt` rather than TideTwin's, and that
+`ci.yml` will not find its paths. `app.py` inserts its own directory on
+`sys.path`, so imports resolve either way, but the dependency ambiguity is real.
+Splitting removes it.
 
 ```bash
 git init -b main
