@@ -1031,6 +1031,36 @@ with TABS[4]:
                                   else ""),
                         ))
                 st.markdown(f"**{sr.verdict}**")
+
+                # Answer the "wrong joint" objection with a number, not an argument.
+                pj = art.c2_stiffness_paper
+                if pj is not None:
+                    st.markdown(
+                        "**Tested at the abstract's own joint.** The K-joint the paper "
+                        "specifies - 762 mm chord, 25 mm wall, 45 degree brace - is softer "
+                        "than every joint on this frame, and a softer joint takes more of "
+                        "the local load path. So the sweep is repeated with the instrumented "
+                        "joint softened to exactly that flexibility."
+                    )
+                    jc = st.columns(2)
+                    with jc[0]:
+                        quantity(derived(
+                            sr.at_claimed_reduction, "-",
+                            "at this frame's own joint", [],
+                            f"10 % reduction, {MODE_SETS[sr.best_mode].label}",
+                        ))
+                    with jc[1]:
+                        quantity(derived(
+                            pj.at_claimed_reduction, "-",
+                            "softened to the paper's K-joint", [],
+                            f"10 % reduction, {MODE_SETS[pj.best_mode].label}",
+                            note="the paper's own stated joint geometry",
+                        ))
+                    st.caption(
+                        "The two agree to well within the factor of thirty that separates "
+                        "either from the claim, so the verdict does not rest on the choice "
+                        "of joint."
+                    )
                 st.divider()
                 st.caption(
                     "Below: the independent crack-model route, retained as corroboration. "

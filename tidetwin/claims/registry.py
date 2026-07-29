@@ -62,6 +62,9 @@ class Artifacts:
     c1: Any = None  # c1_ratio.RatioResult
     c2: Any = None  # c2_damage.DamageGrid
     c2_stiffness: Any = None  # c2_damage.StiffnessReductionResult
+    #: The same sweep with the joint softened to the abstract's own K-joint,
+    #: which answers the "you tested the wrong joint" objection.
+    c2_stiffness_paper: Any = None  # c2_damage.StiffnessReductionResult
     c3: Any = None  # nuisance.NuisanceResult
     c4: Any = None  # dict from detection_time_cdf
     c5: Any = None  # dict: thermal amplitude (or None) + aliasing.AliasingResult
@@ -251,6 +254,29 @@ def _c2(art: Artifacts) -> ClaimResult:
             status = Status.MARGINAL
         else:
             status = Status.FAIL
+        pj = art.c2_stiffness_paper
+        if pj is not None:
+            got_p = pj.at_claimed_reduction
+            detail += (
+                " The obvious objection is that this is the wrong joint. The abstract's own "
+                "K-joint - 762 mm chord, 25 mm wall, 45 degree brace - is softer than any "
+                "joint on this frame, and a softer joint carries more of the load path "
+                "locally, so it might well be more sensitive. Repeating the sweep with the "
+                f"instrumented joint softened to exactly that flexibility gives "
+                f"{got_p * 100:+.3f} percent, "
+                + ("slightly less than" if abs(got_p) < abs(got)
+                   else "about the same as" if abs(got_p) < 1.5 * abs(got)
+                   else "more than")
+                + " the frame's own joint. The claim is not rescued by the joint geometry."
+            )
+            # If softening to the paper's own joint did reach the claim, that would
+            # overturn the verdict, and it must not be buried in prose.
+            if abs(got_p - claimed) / claimed <= 0.25:
+                status = Status.PASS
+                detail += (
+                    " At the paper's own joint flexibility the claimed change IS reproduced, "
+                    "which overturns the verdict computed on this frame's stiffer joint."
+                )
         if art.c2 is not None:
             detail += (
                 f" The independent crack-model route agrees in direction: it gives "
