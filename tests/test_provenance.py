@@ -134,3 +134,22 @@ def test_to_dict_round_trips_the_essentials():
     assert d["citation"]["variable"] == "swh"
     assert d["citation"]["retrieved"] == "2026-02-03"
     assert d["contaminated"] is False
+
+
+def test_a_quantity_refuses_a_string_value_at_the_call_site():
+    """A yes/no is not a measurement, and the error must point at the caller.
+
+    Passing a string used to be accepted and then failed deep inside format(),
+    so the traceback blamed the renderer rather than the call that made the
+    mistake - which is how it reached a rendered page.
+    """
+    with pytest.raises(TypeError, match="numeric"):
+        assumed("yes", "-", "does the criterion discriminate?")
+    with pytest.raises(TypeError):
+        derived("n/a", "-", "some label", [], "some operation")
+
+
+def test_arrays_are_still_accepted():
+    """Time series and sweeps carry provenance too; only strings are refused."""
+    q = assumed(np.linspace(0.0, 1.0, 5), "m", "a swept parameter")
+    assert q.value.shape == (5,)

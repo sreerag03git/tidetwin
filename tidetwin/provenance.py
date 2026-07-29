@@ -170,6 +170,17 @@ class Quantity:
                 f"Quantity '{self.name}' is {self.provenance.value} but carries no citation. "
                 "MEASURED and PUBLISHED values must be traceable."
             )
+        # A Quantity is a number that knows where it came from. A string is not
+        # one, and until this check existed it was accepted here and only failed
+        # much later inside format(), where the traceback points at the renderer
+        # rather than at the call that made the mistake.
+        if isinstance(self.value, (str, bytes)):
+            raise TypeError(
+                f"Quantity '{self.name}' was given the {type(self.value).__name__} "
+                f"{self.value!r}. Quantities are numeric - a yes/no or a label is not a "
+                "measurement and cannot carry uncertainty or units. Write it as text, or "
+                "give the number behind it."
+            )
 
     # ------------------------------------------------------------------ chain
 
