@@ -81,7 +81,7 @@ def series_all(d, rng):
             el = el + rng.normal(0.0, d["noise"], size=el.shape)
         U.append(eu)
         L.append(el)
-    return np.array(U), np.array(L)
+    return np.array(U), np.array(L), eta
 
 
 OM = np.array([float(constituent_frequency("M2").value)])
@@ -130,6 +130,43 @@ def axial_ratio(U, L):
     return float(axial_m2(L) / up) if up > 0 else float("nan")
 
 
+
+
+# ---------------------------------------------------------------- quadrature
+# Drag is in quadrature with elevation; buoyancy is in phase with it. A common
+# scaling of the current scales every drag strain by the same factor, so a
+# DRAG-ONLY ratio should be invariant to spring/neap range. The buoyancy part is
+# what breaks that invariance, so removing it should kill the channel.
+# Elevation comes from a tide gauge, which is a real measurement, so using it as
+# a phase reference is not smuggling in knowledge nobody would have.
+
+def quad_parts(y, eta_series):
+    """In-phase (buoyancy-like) and quadrature (drag-like) M2 parts of a series."""
+    A = m2_phasor(y)
+    E = m2_phasor(eta_series)
+    if abs(E) == 0:
+        return float("nan"), float("nan")
+    rel = A / (E / abs(E))           # rotate so elevation sits at zero phase
+    return abs(rel.real), abs(rel.imag)
+
+
+def axial_series(e):
+    """The direction-invariant axial combination, as a time series."""
+    return (e[0] + e[1] + e[2] + e[3]) / 4.0
+
+
+def axial_quad_ratio(U, L, eta):
+    """Axial rosette, drag component only. Invariant to direction AND to amplitude."""
+    _, qu = quad_parts(axial_series(U), eta)
+    _, ql = quad_parts(axial_series(L), eta)
+    return float(ql / qu) if qu and np.isfinite(qu) and qu > 0 else float("nan")
+
+
+def single_quad_ratio(U, L, eta):
+    """Single pair, drag component only - isolates what conditioning alone buys."""
+    _, qu = quad_parts(U[0], eta)
+    _, ql = quad_parts(L[0], eta)
+    return float(ql / qu) if qu and np.isfinite(qu) and qu > 0 else float("nan")
 def draw_one(rg, rn, active):
     d = dict.fromkeys(
         ["direction_bias", "ellipse_ratio", "current_scale", "wind_u", "wind_v",
@@ -156,52 +193,53 @@ def draw_one(rg, rn, active):
     return d
 
 
+
 rn = NuisanceRanges()
-# growth and scour need structural rebuilds; excluded from BOTH estimators so
-# the comparison stays paired. Direction is the dominant channel either way.
 ACTIVE = [c for c in CHANNELS if c not in ("marine_growth", "scour")]
 
 zero = draw_one(np.random.default_rng(0), rn, set())
-U0, L0 = series_all(zero, np.random.default_rng(0))
-base_single = ratio_from_series(t, U0[0], L0[0])
-base_ros = rosette_ratio(U0, L0)
-base_ax = axial_ratio(U0, L0)
-print(f"baseline ratio   single pair {base_single:.4f}   rosette {base_ros:.4f}\n")
+U0, L0, E0 = series_all(zero, np.random.default_rng(0))
+b_single = ratio_from_series(t, U0[0], L0[0])
+b_ax     = axial_ratio(U0, L0)
+b_axq    = axial_quad_ratio(U0, L0, E0)
+b_sq     = single_quad_ratio(U0, L0, E0)
+print(f"baselines  single {b_single:.4f}   axial {b_ax:.4f}   "
+      f"single+quad {b_sq:.4f}   axial+quad {b_axq:.4f}")
+
+EST = [("single", b_single), ("axial", b_ax), ("sing+quad", b_sq), ("AXIAL+quad", b_axq)]
 
 
 def run(active_set, label):
     rg = np.random.default_rng(4242)
-    s_vals, r_vals, a_vals = np.empty(N), np.empty(N), np.empty(N)
+    V = np.empty((4, N))
     for i in range(N):
         d = draw_one(rg, rn, active_set)
-        U, L = series_all(d, rg)
-        s_vals[i] = ratio_from_series(t, U[0], L[0])
-        r_vals[i] = rosette_ratio(U, L)
-        a_vals[i] = axial_ratio(U, L)
-    def cv(v, b):
-        sd = float(np.nanstd(v, ddof=1))
-        rb = robust_scale(v)
-        return sd / abs(b) * 100, rb / abs(b) * 100
-    ss, _ = cv(s_vals, base_single)
-    rs, _ = cv(r_vals, base_ros)
-    as_, ar_ = cv(a_vals, base_ax)
-    print(f"{label:<24}{ss:9.2f}%{rs:12.2f}%{as_:12.2f}%  (robust {ar_:5.2f}%)")
-    return s_vals, r_vals, a_vals
+        U, L, E = series_all(d, rg)
+        V[0, i] = ratio_from_series(t, U[0], L[0])
+        V[1, i] = axial_ratio(U, L)
+        V[2, i] = single_quad_ratio(U, L, E)
+        V[3, i] = axial_quad_ratio(U, L, E)
+    cells = []
+    for j, (_nm, b) in enumerate(EST):
+        cells.append(f"{float(np.nanstd(V[j], ddof=1)) / abs(b) * 100:11.2f}%")
+    print(f"{label:<22}" + "".join(cells))
+    return V
 
 
 print("nuisance dispersion, as % of the intact ratio")
-print(f"{'channel':<24}{'single':>10}{'bend-rose':>13}{'AXIAL-rose':>13}")
-print("-" * 76)
+print(f"{'channel':<22}" + "".join(f"{nm:>12}" for nm, _ in EST))
+print("-" * 72)
 for ch in ACTIVE:
     run({ch}, f"  {ch}")
-print("-" * 76)
-sv, rv, av = run(set(ACTIVE), "JOINT (all channels)")
+print("-" * 72)
+V = run(set(ACTIVE), "JOINT (all)")
 
-for label, v, b in (("single pair    ", sv, base_single),
-                    ("bending rosette", rv, base_ros),
-                    ("AXIAL rosette  ", av, base_ax)):
-    rel = np.abs(v - b) / abs(b)
+print()
+for j, (nm, b) in enumerate(EST):
+    v = V[j]
     sd = float(np.nanstd(v, ddof=1)) / abs(b)
-    print(f"\n{label}:  sigma/signal = {sd / SIG:.2f}x (limit 0.33)   "
-          f"false alarms = {np.mean(rel >= SIG) * 100:.1f}%   "
-          f"-> {'PASS' if sd / SIG <= 1 / 3 else 'FAIL'}")
+    rb = robust_scale(v) / abs(b)
+    fa = np.mean(np.abs(v - b) / abs(b) >= SIG) * 100
+    verdict = "PASS" if sd / SIG <= 1/3 else ("PASS(robust)" if rb / SIG <= 1/3 else "FAIL")
+    print(f"{nm:<12} sigma/signal {sd/SIG:5.2f}x   robust/signal {rb/SIG:5.2f}x   "
+          f"false alarms {fa:5.1f}%   -> {verdict}")

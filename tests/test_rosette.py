@@ -13,7 +13,9 @@ import pytest
 from tidetwin.loads.tides import constituent_frequency
 from tidetwin.rosette import (
     ROSETTE_ANGLES_DEG,
+    axial_drag_ratio,
     axial_ratio,
+    drag_component,
     bending_ratio,
     decompose,
     m2_phasor,
@@ -113,3 +115,67 @@ def test_bending_fraction_flags_a_section_with_no_usable_bending():
     """The measured situation at J5: bending is a few percent of axial."""
     d = decompose(T, field(axial=1.0e-6, bx=0.02e-6, by=0.0))
     assert d.bending_fraction < 0.1
+
+
+# ---------------------------------------------------------------------------
+# The second correction: projecting onto the drag (quadrature) component, which
+# is what removes the current's AMPLITUDE from the ratio.
+
+
+def tide(amp=1.0, phase=0.0):
+    return amp * np.cos(OM * T - phase)
+
+
+def test_drag_and_buoyancy_are_separated_by_their_phase():
+    """Drag leads the tide by a quarter cycle; buoyancy is in step with it."""
+    eta = tide()
+    assert drag_component(T, tide(2.0, np.pi / 2), eta) == pytest.approx(2.0, rel=1e-6)
+    assert drag_component(T, tide(2.0, 0.0), eta) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_common_current_scaling_cancels_in_a_drag_only_ratio():
+    """The mechanism the fix relies on.
+
+    Morison drag goes as U^2, so scaling the current scales every drag strain by
+    one common factor, which cancels in a ratio. Spring/neap only moves the plain
+    ratio because buoyancy rides along and does not scale.
+    """
+    eta = tide()
+    for scale in (0.5, 1.0, 2.7):
+        up = [tide(1.0 * scale, np.pi / 2) for _ in ROSETTE_ANGLES_DEG]
+        lo = [tide(1.8 * scale, np.pi / 2) for _ in ROSETTE_ANGLES_DEG]
+        assert axial_drag_ratio(T, up, lo, eta) == pytest.approx(1.8, rel=1e-6)
+
+
+def test_buoyancy_contamination_is_what_breaks_that_invariance():
+    """Control: with the buoyancy part left in, the ratio moves with the scaling."""
+    eta = tide()
+    seen = []
+    for scale in (0.5, 2.0):
+        up = [tide(1.0 * scale, np.pi / 2) + tide(0.5, 0.0) for _ in ROSETTE_ANGLES_DEG]
+        lo = [tide(1.8 * scale, np.pi / 2) + tide(0.2, 0.0) for _ in ROSETTE_ANGLES_DEG]
+        seen.append(axial_ratio(T, up, lo))
+    assert abs(seen[0] - seen[1]) > 0.1, "buoyancy must make the plain ratio scale-dependent"
+
+
+def test_the_combined_estimator_is_invariant_to_direction_and_amplitude_at_once():
+    """Rotate the load and rescale it; the ratio must hold."""
+    eta = tide()
+    ref = None
+    for load_deg, scale in ((0.0, 1.0), (61.0, 0.4), (200.0, 2.2), (315.0, 1.7)):
+        r = np.radians(load_deg)
+        def sec(a, b):
+            return [(a + b * np.cos(np.radians(p) - r)) * scale * np.cos(OM * T - np.pi / 2)
+                    + 0.3 * np.cos(OM * T)
+                    for p in ROSETTE_ANGLES_DEG]
+        got = axial_drag_ratio(T, sec(1.0, 0.4), sec(1.8, 0.9), eta)
+        if ref is None:
+            ref = got
+        assert got == pytest.approx(ref, rel=1e-6)
+
+
+def test_a_flat_tide_reference_gives_nan_rather_than_a_phase_from_nowhere():
+    flat = np.zeros_like(T)
+    assert np.isnan(drag_component(T, tide(1.0), flat))
+    up = [tide(1.0, np.pi / 2) for _ in ROSETTE_ANGLES_DEG]
+    assert np.isnan(axial_drag_ratio(T, up, up, flat))
