@@ -24,7 +24,7 @@ number that looks like a result.
 | **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 1.64 MUSD (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
 | **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
 
-<sub>TideTwin 0.1.0 - commit `6c8bfd7` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-29T03:27:44Z</sub>
+<sub>TideTwin 0.1.0 - commit `541bbc4` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-29T03:46:52Z</sub>
 <!-- CLAIMS-LEDGER:END -->
 
 **The headline finding is C3.** Under the eight nuisance channels the brief
