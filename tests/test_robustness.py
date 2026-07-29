@@ -12,7 +12,13 @@ import numpy as np
 import pytest
 
 from tidetwin.analysis import AnalysisConfig, normalise, run_full, run_quick
-from tidetwin.claims.ledger import build_stamp, markdown_summary, to_csv, to_latex
+from tidetwin.claims.ledger import (
+    build_stamp,
+    ledger_frame,
+    markdown_summary,
+    to_csv,
+    to_latex,
+)
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
 from tidetwin.fe.ljf import LJFModel
 from tidetwin.geometry.oc4 import OC4_CITATION, load_tables
@@ -290,3 +296,23 @@ def test_the_readme_table_does_not_change_when_only_the_clock_does():
     # The determinants of the numbers must still be recorded.
     for needle in ("seed", "LJF", "geometry"):
         assert needle in first, f"the stamp must still record the {needle}"
+
+
+def test_every_claim_carries_the_abstract_s_own_wording():
+    """A paraphrase is where a claim gets softened; the verbatim text must travel.
+
+    Nine claims, nine quotes, each actually present in the ledger export.
+    """
+    from tidetwin.abstract import CLAIM_TEXT
+
+    assert set(CLAIM_TEXT) == {c.id for c in CLAIMS}
+    for c in CLAIMS:
+        assert c.quote.strip(), f"{c.id} has no verbatim text from the abstract"
+        assert c.quote != c.statement, (
+            f"{c.id}'s quote is just the paraphrase repeated, which defeats the point"
+        )
+
+    art = Artifacts()
+    frame = ledger_frame(evaluate_all(art))
+    assert "abstract_quote" in frame.columns
+    assert (frame["abstract_quote"].str.strip() != "").all()

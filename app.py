@@ -1338,11 +1338,23 @@ with TABS[6]:
 with TABS[7]:
     with panel("Ledger tab"):
         section("Claims ledger", "the table a paper would cite, with the stamp that makes it checkable")
+        st.caption(
+            "Each claim is shown as the abstract words it, not as a paraphrase written "
+            "here. A paraphrase is exactly where a claim can be quietly softened before "
+            "it is judged, so the paper's own text is what appears."
+        )
         for c in CLAIMS:
             r = by_id[c.id]
             cols = st.columns([1, 6, 3])
             cols[0].markdown(f"**{c.id}**")
-            cols[1].markdown(c.statement)
+            with cols[1]:
+                if c.quote:
+                    st.markdown(f"> *{c.quote}*")
+                    with st.expander("as tested here"):
+                        st.markdown(c.statement)
+                        st.caption(f"Pass criterion: {c.pass_criterion}")
+                else:
+                    st.markdown(c.statement)
             cols[2].markdown(status_chip(r.status), unsafe_allow_html=True)
         st.divider()
         dataframe(ledger_frame(results))

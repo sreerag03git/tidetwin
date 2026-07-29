@@ -10,7 +10,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tidetwin.abstract import PAPER
 from tidetwin.assimilation.baseline import prior_only, sn_miner_baseline
+from tidetwin.claims.tests.c6_filter import run_comparison
 from tidetwin.assimilation.calibration import (
     assess,
     coverage,
@@ -209,3 +211,51 @@ def test_sn_baseline_is_honestly_unavailable():
         sn_miner_baseline()
     assert "DNV-RP-C203" in str(exc.value)
     assert exc.value.remedy
+
+
+# ---------------------------------------------------------------------------
+# The abstract's own convergence criterion: within 8 percent of true damage by
+# month 18. Testable here, unlike its remaining-life interval, so it is tested.
+
+
+def _fc(**kw):
+    return run_comparison(n_steps=20, n_members=32, n_particles=64, **kw)
+
+
+def test_convergence_requires_staying_inside_the_band_not_just_touching_it():
+    """An estimate that crosses the band on its way elsewhere has not converged.
+
+    Under structural model error a filter can drift through the tolerance and
+    out again, and reporting that first crossing as the convergence time would
+    flatter it.
+    """
+    fc = _fc()
+    touch = fc.first_within("log-EnKF", 0.08, hold=False)
+    stay = fc.first_within("log-EnKF", 0.08, hold=True)
+    assert np.isnan(stay) or stay >= touch
+
+
+def test_a_criterion_the_do_nothing_baseline_also_passes_is_flagged():
+    """The 8-percent-by-18-months test must not be quoted as evidence if the
+    no-update baseline clears it too."""
+    fc = _fc()
+    ac = fc.abstract_convergence()
+    if ac["met"] and ac["baseline_also_meets"]:
+        assert not ac["discriminates"]
+    assert set(ac) >= {"met", "baseline_also_meets", "discriminates",
+                       "error_at_deadline", "baseline_error_at_deadline"}
+
+
+def test_the_convergence_numbers_come_from_the_abstract():
+    """Defaults must be the paper's own figures, not ones chosen here."""
+    fc = _fc()
+    ac = fc.abstract_convergence()
+    assert ac["tolerance"] == pytest.approx(PAPER.enkf_convergence_error)
+    assert ac["by_years"] * 12.0 == pytest.approx(PAPER.enkf_convergence_months)
+
+
+def test_relative_error_is_zero_when_the_ensemble_sits_on_the_truth():
+    fc = _fc()
+    fc.ensembles["exact"] = np.repeat(fc.truth[:, None], 4, axis=1)
+    assert np.allclose(fc.relative_error("exact"), 0.0)
+    assert fc.first_within("exact", 1e-9) == pytest.approx(fc.times_years[0])
