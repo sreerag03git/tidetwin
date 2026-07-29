@@ -35,9 +35,6 @@ from tidetwin.robustness import (
 from tidetwin.claims.ledger import build_stamp, ledger_frame, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
 from tidetwin.claims.tests.c2_damage import MODE_SETS
-from tidetwin.damage.crack_ljf import shell_fe_status
-from tidetwin.damage.paris import paris_status
-from tidetwin.damage.sn import sn_status
 from tidetwin.economics.npv import EconomicInputs, tornado
 from tidetwin.fe.ljf import JointGeometry, LJFModel, ljf_quantity
 from tidetwin.geometry.oc4 import (
@@ -68,7 +65,6 @@ from tidetwin.ui import (
     section,
     status_chip,
     unavailable_panel,
-    verdict_block,
 )
 
 st.set_page_config(
@@ -1023,10 +1019,10 @@ with TABS[4]:
                 for col, (key, val) in zip(mc, sr.change_by_mode.items()):
                     with col:
                         quantity(derived(
-                            val, "-",
+                            val * 100.0, "%",
                             f"reduce {MODE_SETS[key].label}", [],
                             "impose a 10 % reduction on that LJF spring and re-solve "
-                            "the frame; fractional change in the M2 strain ratio",
+                            "the frame; change in the M2 strain ratio",
                             note=("most favourable to the claim" if key == sr.best_mode
                                   else ""),
                         ))
@@ -1045,13 +1041,13 @@ with TABS[4]:
                     jc = st.columns(2)
                     with jc[0]:
                         quantity(derived(
-                            sr.at_claimed_reduction, "-",
+                            sr.at_claimed_reduction * 100.0, "%",
                             "at this frame's own joint", [],
                             f"10 % reduction, {MODE_SETS[sr.best_mode].label}",
                         ))
                     with jc[1]:
                         quantity(derived(
-                            pj.at_claimed_reduction, "-",
+                            pj.at_claimed_reduction * 100.0, "%",
                             "softened to the paper's K-joint", [],
                             f"10 % reduction, {MODE_SETS[pj.best_mode].label}",
                             note="the paper's own stated joint geometry",
@@ -1413,12 +1409,12 @@ with TABS[8]:
     with panel("Provenance tab"):
         section("Data source status", "what is real here, and what is honestly missing")
         st.markdown(
-            f'<span class="tt-chip" style="color:#1a7f43">AVAILABLE</span> &nbsp; '
+            '<span class="tt-chip" style="color:#1a7f43">AVAILABLE</span> &nbsp; '
             "**OC4 jacket geometry**", unsafe_allow_html=True,
         )
         st.caption(str(OC4_CITATION))
         st.markdown(
-            f'<span class="tt-chip" style="color:#1a7f43">AVAILABLE</span> &nbsp; '
+            '<span class="tt-chip" style="color:#1a7f43">AVAILABLE</span> &nbsp; '
             "**NOAA tidal harmonic constants**", unsafe_allow_html=True,
         )
         st.caption(f"{len(available_cached())} station pairs cached, water level and "

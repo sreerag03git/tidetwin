@@ -571,7 +571,7 @@ def _c9(art: Artifacts) -> ClaimResult:
     if not p.competitor_curves:
         status = Status.UNTESTABLE_DATA
         detail = (
-            f"POD for the tidal method reaches 90 percent at a90 = "
+            "POD for the tidal method reaches 90 percent at a90 = "
             + (f"{p.a90 * 1e3:.1f} mm" if np.isfinite(p.a90) else "no crack size on the grid")
             + ". The comparison against ROV MPI, ACFM and flooded member detection cannot be "
             "made: their published POD curves are not shipped. " + p.competitor_note.split("\n")[0]

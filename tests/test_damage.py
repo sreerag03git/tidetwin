@@ -24,7 +24,6 @@ from tidetwin.damage.newman_raju import (
     sif,
 )
 from tidetwin.claims.tests.c2_damage import (
-    MODE_SETS,
     StiffnessReductionResult,
     stiffness_reduction_test,
 )

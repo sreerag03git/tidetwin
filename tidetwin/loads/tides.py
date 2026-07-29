@@ -261,7 +261,6 @@ def from_pytmd(
             why,
             "Install pyTMD, download TPXO9-atlas, and set TIDETWIN_TIDE_MODEL_DIR to its path.",
         )
-    import pyTMD.compute  # pragma: no cover - requires the model download
 
     raise DataUnavailable(  # pragma: no cover
         "Tidal harmonic constants (TPXO/FES)",
