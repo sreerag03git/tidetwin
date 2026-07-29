@@ -203,9 +203,20 @@ def markdown_summary(results: list[ClaimResult], stamp: Stamp) -> str:
             f"| **{c.id}** {stmt} | {c.claimed_value} | {r.computed_text} | **{r.status.value}** |"
         )
     out.append("")
+    # Deliberately no commit hash and no wall-clock time. This block lives *in*
+    # the commit it would name, so the hash could only ever be the previous
+    # commit's - it can never be right. Worse, both fields change on every run
+    # even when no number does, so CI regenerated and committed the table on
+    # every push, and each such commit collided with the next local run.
+    #
+    # What belongs here is what determines the numbers: the code version, the
+    # seed, the geometry the digest pins, the joint model, and the tidal source.
+    # If any of those is unchanged the table is unchanged, so CI now commits only
+    # when a result has actually moved. The full stamp, commit hash and timestamp
+    # included, is still written to ledger.csv and ledger.tex.
     out.append(
-        f"<sub>TideTwin {stamp.app_version} - commit `{stamp.git_commit}` - seed {stamp.seed} - "
+        f"<sub>TideTwin {stamp.app_version} - seed {stamp.seed} - "
         f"OC4 geometry `{stamp.geometry_digest}` - LJF {stamp.ljf_model} - "
-        f"tidal constants {stamp.tide_source} - generated {stamp.generated_utc}</sub>"
+        f"tidal constants {stamp.tide_source}</sub>"
     )
     return "\n".join(out)

@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from tidetwin.analysis import AnalysisConfig, normalise, run_full, run_quick
-from tidetwin.claims.ledger import build_stamp, to_csv, to_latex
+from tidetwin.claims.ledger import build_stamp, markdown_summary, to_csv, to_latex
 from tidetwin.claims.registry import CLAIMS, Artifacts, Status, evaluate_all
 from tidetwin.fe.ljf import LJFModel
 from tidetwin.geometry.oc4 import OC4_CITATION, load_tables
@@ -265,3 +265,28 @@ def test_a_completed_claim_is_never_marked_not_run():
     # C1 and C7 are computed by the quick pass, so they must carry real verdicts.
     assert by_id["C1"].status.is_verdict
     assert by_id["C7"].status.is_verdict
+
+
+def test_the_readme_table_does_not_change_when_only_the_clock_does():
+    """The committed claims table must depend on results, nothing else.
+
+    It used to carry the commit hash and the generation time. Both are wrong
+    there: the block lives inside the commit it names, so the hash can only ever
+    be the previous one, and both fields move on every run even when no result
+    does. CI regenerated and committed the table on every push as a result, and
+    each of those commits collided with the next local regeneration.
+    """
+    import time
+
+    art = Artifacts()
+    results = evaluate_all(art)
+    first = markdown_summary(results, _stamp())
+    time.sleep(1.1)
+    second = markdown_summary(results, _stamp())
+    assert first == second
+
+    assert "generated" not in first
+    assert "commit" not in first
+    # The determinants of the numbers must still be recorded.
+    for needle in ("seed", "LJF", "geometry"):
+        assert needle in first, f"the stamp must still record the {needle}"
