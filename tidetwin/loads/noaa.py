@@ -214,7 +214,11 @@ def fetch_pair(pair: StationPair, cache_dir: Path | None = None) -> dict:
         },
     }
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    # newline="" so Python does not translate to CRLF on Windows: these files are
+    # committed, and platform-dependent bytes make committed data non-reproducible.
+    cache.write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline=""
+    )
     return payload
 
 

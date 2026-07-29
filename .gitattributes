@@ -1,0 +1,25 @@
+# Deterministic bytes on every platform.
+#
+# The OC4 geometry tables are verified by SHA-256 against
+# data/geometry/MANIFEST.json before the app will use them. Git's automatic
+# CRLF translation changes those bytes on checkout, so on a Windows clone the
+# integrity check fails and the app refuses to start - correctly, since it
+# cannot tell an editing accident from a line-ending conversion.
+#
+# Found by cloning the repository fresh on Windows. It never showed up in the
+# working tree the files were authored in, which is the point of testing a
+# clone rather than a checkout you already have.
+
+* text=auto eol=lf
+
+# Hash-verified data: never translate these, whatever the platform or the
+# user's core.autocrlf setting.
+data/geometry/*.csv          -text
+data/geometry/MANIFEST.json  -text
+data/constituents/*.json     -text
+
+# Keep binary artefacts binary.
+*.png  binary
+*.pdf  binary
+*.parquet binary
+*.nc   binary

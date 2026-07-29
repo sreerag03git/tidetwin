@@ -54,7 +54,11 @@ def main() -> None:
         "files": files,
     }
     out = DATA / "MANIFEST.json"
-    out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    # newline="" prevents CRLF translation on Windows; the hashes recorded here
+    # must describe bytes that are identical on every platform.
+    out.write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline=""
+    )
     print(f"wrote {out}")
     for name, meta in files.items():
         print(f"  {name}: {meta['rows']} rows, sha256 {meta['sha256'][:16]}...")
