@@ -33,16 +33,21 @@ __all__ = ["FBGSpec", "apparent_strain_from_temperature", "simulate_pair"]
 class FBGSpec:
     """Grating and interrogator characteristics.
 
-    ``resolution_ustrain`` is the interrogator's strain resolution; 1 microstrain
-    is typical of a mid-range commercial unit and 0.1 of a high-end one.
+    Defaults are **the paper's own stated specification**: 0.1 microstrain
+    resolution and drift below 0.05 microstrain per year. Those are demanding but
+    achievable with a high-end interrogator, and testing the claim against a
+    worse sensor than it specifies would not be testing the claim. Earlier
+    versions of this file defaulted to 1.0 and 5.0, which was unfair to it by
+    factors of ten and a hundred.
+
     ``drift_ustrain_per_year`` covers grating relaxation and clamp creep, which
-    for a bonded or welded offshore installation is the dominant long-term error
-    and the one that most resembles a slowly growing crack.
+    for a clamp-on retrofit is the dominant long-term error and the one that most
+    resembles a slowly growing crack.
     """
 
-    resolution_ustrain: float = 1.0
-    noise_ustrain_rms: float = 0.5
-    drift_ustrain_per_year: float = 5.0
+    resolution_ustrain: float = 0.1
+    noise_ustrain_rms: float = 0.05
+    drift_ustrain_per_year: float = 0.05
     photoelastic_constant: float = 0.22
     thermo_optic_per_K: float = 6.5e-6
     fibre_expansion_per_K: float = 0.55e-6

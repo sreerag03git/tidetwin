@@ -28,7 +28,11 @@ import numpy as np
 
 from .claims.registry import Artifacts
 from .claims.tests.c1_ratio import intact_ratio
-from .claims.tests.c2_damage import damage_sensitivity_grid, damage_signature
+from .claims.tests.c2_damage import (
+    damage_sensitivity_grid,
+    damage_signature,
+    stiffness_reduction_test,
+)
 from .claims.tests.c6_filter import run_comparison
 from .claims.tests.c7_modal import modal_insensitivity
 from .claims.tests.c9_positioning import competitor_status, tidal_pod
@@ -436,6 +440,18 @@ def run_full(cfg: AnalysisConfig, progress=None) -> Artifacts:
                 surface_length_m=np.array([0.06, 0.10, 0.20, 0.40]),
                 ljf_model=cfg.ljf_model,
                 n_theta=max(8, cfg.n_theta // 2),
+            ),
+        )
+
+        # The abstract's own intermediate step: 10 percent stiffness reduction ->
+        # 11.1 percent ratio change. Pure mechanics, no crack model, so it tests
+        # the claim on terms that depend on nothing chosen here.
+        art.c2_stiffness = _guard(
+            art,
+            "C2",
+            lambda: stiffness_reduction_test(
+                pair, constituents, hydro, cfg.joint_id, braces[0],
+                ljf_model=cfg.ljf_model, n_theta=max(8, cfg.n_theta // 2),
             ),
         )
 

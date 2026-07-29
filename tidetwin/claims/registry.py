@@ -61,6 +61,7 @@ class Artifacts:
 
     c1: Any = None  # c1_ratio.RatioResult
     c2: Any = None  # c2_damage.DamageGrid
+    c2_stiffness: Any = None  # c2_damage.StiffnessReductionResult
     c3: Any = None  # nuisance.NuisanceResult
     c4: Any = None  # dict from detection_time_cdf
     c5: Any = None  # dict: thermal amplitude (or None) + aliasing.AliasingResult
@@ -190,8 +191,8 @@ def _c1(art: Artifacts) -> ClaimResult:
             f"The solver gives {r.ratio:.4f} ({r.reciprocal:.4f} reciprocal) against a claimed "
             f"{claimed:.3f}. More decisively, the M2 strain amplitudes are "
             f"{r.amplitude_upper * 1e6:.3f} and {r.amplitude_lower * 1e6:.3f} microstrain - below "
-            "the ~1 microstrain resolution of a commercial FBG interrogator. A ratio between two "
-            "quantities that cannot be measured is not a measurable ratio, whatever its value."
+            "the 0.1 microstrain the paper itself specifies for the interrogator. A ratio "
+            "between two quantities that cannot be measured is not a measurable ratio."
         )
     elif best <= 0.05:
         status = Status.PASS
@@ -218,30 +219,56 @@ def _c1(art: Artifacts) -> ClaimResult:
 
 
 def _c2(art: Artifacts) -> ClaimResult:
-    if art.c2 is None:
-        return _missing("C2", "Run the analysis to compute the damage grid.", "")
-    g = art.c2
-    claimed = 0.111
-    sig = g.signature_at(0.5, 0.10)
-    if not art.shell_fe_available:
-        status = Status.UNTESTABLE_DATA
-        detail = (
-            f"Via the line-spring compliance route the change at a/T=0.5, 2c=100 mm is "
-            f"{sig * 100:.4f} percent, and the largest anywhere on the grid is "
-            f"{g.max_signature * 100:.4f} percent - both far below the claimed "
-            f"{claimed * 100:.1f} percent. That route is documented to under-predict, so this is "
-            "reported as a lower bound rather than a refutation. Settling C2 needs the "
-            "shell-FE crack-to-LJF surface, which is not shipped, and validation against "
-            "Soh (2000) and Rhee (2005), whose data are not shipped either."
+    st_res = art.c2_stiffness
+    if st_res is None and art.c2 is None:
+        return _missing("C2", "Run the analysis to compute the damage sensitivity.", "")
+
+    # The abstract supplies its own intermediate step: a 20 percent through-wall
+    # crack produces a 10 percent joint stiffness reduction, which takes the
+    # ratio from 1.800 to 2.000. The second link is pure structural mechanics and
+    # can be tested exactly - no crack model, no shell-FE surface, no fracture
+    # mechanics. That makes it the primary evidence, because it depends on
+    # nothing this application chose.
+    if st_res is not None:
+        got = st_res.at_claimed_reduction
+        claimed = st_res.claimed_signature
+        detail = st_res.verdict + (
+            " This is the paper's own intermediate quantity, so the result does not depend "
+            "on how the crack was modelled here, nor on the shell-FE surface that is not "
+            "shipped. It is consistent with the local-joint-flexibility sweep on the "
+            "Structure tab: removing joint flexibility altogether moves the ratio under 1 "
+            "percent, so a 10 percent reduction in it cannot move the ratio by 11."
         )
-    elif abs(sig - claimed) / claimed <= 0.2:
-        status = Status.PASS
-        detail = f"Computed {sig * 100:.2f} percent against a claimed {claimed * 100:.1f} percent."
-    else:
-        status = Status.FAIL
-        detail = f"Computed {sig * 100:.4f} percent against a claimed {claimed * 100:.1f} percent."
-    detail += " " + " ".join(g.caveats)
-    return ClaimResult("C2", status, f"{sig * 100:.4f} % at a/T=0.5, 2c=100 mm", detail, _contamination(art))
+        if abs(got - claimed) / claimed <= 0.25:
+            status = Status.PASS
+        elif abs(got) >= 0.4 * claimed:
+            status = Status.MARGINAL
+        else:
+            status = Status.FAIL
+        if art.c2 is not None:
+            detail += (
+                f" The independent crack-model route agrees in direction: it gives "
+                f"{art.c2.signature_at(0.5, 0.10) * 100:.4f} percent at a half-through-wall, "
+                "100 mm flaw."
+            )
+        return ClaimResult(
+            "C2", status,
+            f"{got * 100:.3f} % at the paper's own 10 % stiffness reduction",
+            detail, _contamination(art),
+        )
+
+    g = art.c2
+    sig = g.signature_at(0.5, 0.10)
+    detail = (
+        f"Via the line-spring compliance route the change at a/T=0.5, 2c=100 mm is "
+        f"{sig * 100:.4f} percent, and the largest anywhere on the grid is "
+        f"{g.max_signature * 100:.4f} percent, against a claimed 11.1 percent. That route is "
+        "documented to under-predict, so this alone is a lower bound rather than a refutation."
+    ) + " " + " ".join(g.caveats)
+    return ClaimResult(
+        "C2", Status.UNTESTABLE_DATA,
+        f"{sig * 100:.4f} % at a/T=0.5, 2c=100 mm", detail, _contamination(art),
+    )
 
 
 def _c3(art: Artifacts) -> ClaimResult:

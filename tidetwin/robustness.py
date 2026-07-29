@@ -33,9 +33,10 @@ from .response import build_response_surface
 __all__ = ["SensitivityRow", "ljf_sensitivity", "joint_sensitivity"]
 
 
-#: Strain resolution of a mid-range commercial FBG interrogator, microstrain.
-#: A signal below this cannot be read at all, whatever is done downstream.
-FBG_RESOLUTION_USTRAIN = 1.0
+#: The paper's own stated FBG resolution, microstrain. A signal below this
+#: cannot be read at all, whatever is done downstream. Using a worse figure
+#: would make an unfair test of the claim.
+FBG_RESOLUTION_USTRAIN = 0.1
 
 
 @dataclass(frozen=True)

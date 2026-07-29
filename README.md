@@ -15,16 +15,16 @@ number that looks like a result.
 | Claim | Asserted | Computed | Status |
 |---|---|---|---|
 | **C1** Under intact conditions the tidal strain ratio at a bracketing sensor pair on the targe... | 1.800 | 1.9059 (reciprocal 0.5247) | **MARGINAL** |
-| **C2** A crack at the joint changes the strain ratio from 1.800 to 2.000, an 11.1 percent dama... | 11.1 percent (1.800 -> 2.000) | 0.0043 % at a/T=0.5, 2c=100 mm | **UNTESTABLE - DATA MISSING** |
-| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 8.19 % of the intact ratio | **FAIL** |
-| **C4** Detection is achieved in 4 to 9 days at a signal-to-noise ratio of 3. | 4-9 days | never detected in 88 % of trials | **FAIL** |
+| **C2** A crack at the joint changes the strain ratio from 1.800 to 2.000, an 11.1 percent dama... | 11.1 percent (1.800 -> 2.000) | -0.030 % at the paper's own 10 % stiffness reduction | **FAIL** |
+| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 8.02 % of the intact ratio | **FAIL** |
+| **C4** Detection is achieved in 4 to 9 days at a signal-to-noise ratio of 3. | 4-9 days | never detected in 82 % of trials | **FAIL** |
 | **C5** During neap tides a differential thermal channel of 5 to 15 microstrain provides a usab... | 5-15 microstrain | aliasing resolved; amplitude n/a | **UNTESTABLE - DATA MISSING** |
 | **C6** The log-transformed EnKF converges on remaining life to within +/-0.9 years, outperform... | +/-0.9 years | coverage 100 % | **MARGINAL** |
 | **C7** The same damage produces a natural frequency shift below 0.5 percent, so modal methods ... | < 0.5 percent | 0.0008 % | **PASS** |
 | **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 1.64 MUSD (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
 | **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
 
-<sub>TideTwin 0.1.0 - commit `9f07b32` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-29T14:18:36Z</sub>
+<sub>TideTwin 0.1.0 - commit `9f07b32` - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter. - generated 2026-07-29T14:29:22Z</sub>
 <!-- CLAIMS-LEDGER:END -->
 
 **The headline finding is C3.** Under the eight nuisance channels the brief
