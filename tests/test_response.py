@@ -257,3 +257,36 @@ def test_shared_build_rejects_an_empty_pair_list():
     build = build_jacket(ljf_model=LJFModel.RIGID, tables=tables)
     with pytest.raises(ValueError, match="at least one"):
         build_response_surfaces(build, [], CFG, n_theta=8)
+
+
+def test_marine_growth_does_not_change_the_static_surface_only_the_config_does():
+    """The invariant the grid-setup optimisation rests on.
+
+    Marine growth enters build_jacket only as added mass, which a static response
+    surface never uses; the drag effect comes through HydroConfig. So a jacket
+    built with growth and one built without must produce the same surface for the
+    same config - which is what lets the nuisance grid build one jacket per scour
+    value instead of one per (growth, scour) cell. If build_jacket ever starts
+    changing the stiffness with growth, this catches it.
+    """
+    from dataclasses import replace
+
+    from tidetwin.response import build_response_surfaces
+
+    tables = load_tables()
+    pair = sensor_pair(tables, 5, 1.5)
+    eta = np.linspace(-2.0, 2.0, 3)
+    for g in (0.0, 50.0, 100.0):
+        cfg_g = replace(CFG, marine_growth_mm=g)
+        with_growth = build_response_surfaces(
+            build_jacket(ljf_model=LJFModel.SHELL, marine_growth_mm=g, tables=tables),
+            [pair], cfg_g, n_theta=12, eta_levels=eta,
+        )[0]
+        without = build_response_surfaces(
+            build_jacket(ljf_model=LJFModel.SHELL, marine_growth_mm=0.0, tables=tables),
+            [pair], cfg_g, n_theta=12, eta_levels=eta,
+        )[0]
+        assert np.array_equal(with_growth.drag_upper, without.drag_upper)
+        assert np.array_equal(with_growth.drag_lower, without.drag_lower)
+        assert np.array_equal(with_growth.buoy_upper, without.buoy_upper)
+        assert np.array_equal(with_growth.buoy_lower, without.buoy_lower)
