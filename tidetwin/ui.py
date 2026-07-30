@@ -24,6 +24,7 @@ from contextlib import contextmanager
 
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 from .claims.registry import Status
 from .provenance import Provenance, Quantity
@@ -33,6 +34,7 @@ __all__ = [
     "loading_screen",
     "masthead",
     "cover",
+    "svg_figure",
     "static_export_status",
     "quantity",
     "panel",
@@ -413,6 +415,32 @@ def masthead(subtitle: str) -> None:
         unsafe_allow_html=True,
     )
 
+
+
+def svg_figure(svg: str, height: int = 320) -> None:
+    """Render an inline SVG reliably, inside a component iframe.
+
+    st.markdown(..., unsafe_allow_html=True) runs its HTML through a sanitizer
+    that strips <svg> and its shape children while keeping the <text> nodes.
+    That is why the method diagram showed as a tall blank gap with its labels
+    spilling out as loose text: the drawing was removed and only the words
+    survived. components.html renders raw markup in a sandboxed iframe with no
+    sanitiser, so the diagram actually draws.
+
+    The SVG keeps its own ``width:100%;height:auto`` styling; this only ensures
+    it preserves its aspect ratio and sits on a transparent, margin-free page so
+    it lines up with the Streamlit column above and below it.
+    """
+    svg_tag = svg
+    if "preserveAspectRatio" not in svg_tag:
+        svg_tag = svg_tag.replace("<svg ", '<svg preserveAspectRatio="xMidYMid meet" ', 1)
+    doc = (
+        "<!doctype html><meta charset='utf-8'>"
+        "<style>html,body{margin:0;padding:0;background:transparent;"
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}</style>"
+        f"<body>{svg_tag}</body>"
+    )
+    components.html(doc, height=height, scrolling=False)
 
 
 def cover(
