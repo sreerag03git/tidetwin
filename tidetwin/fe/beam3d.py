@@ -214,6 +214,22 @@ def local_mass(sec: Section, L: float, lumped: bool = False) -> np.ndarray:
     return M + np.triu(M, 1).T - np.diag(np.diag(np.triu(M, 1).T))
 
 
+def _cross3(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Cross product of two 3-vectors, by the textbook formula.
+
+    ``np.cross`` is general over broadcasting and axes, and pays for it: on the
+    profile of a full nuisance budget it drove 300k calls into ``moveaxis`` and
+    ``normalize_axis_tuple`` inside a hot FE loop. For fixed length-3 vectors the
+    explicit form is the same three products per component and carries none of
+    that dispatch. The result is bit-for-bit what np.cross returns here.
+    """
+    return np.array([
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ])
+
+
 def transformation(xi: np.ndarray, xj: np.ndarray, roll: float = 0.0) -> tuple[np.ndarray, float]:
     """Direction-cosine matrix (12x12) and element length.
 
@@ -229,14 +245,14 @@ def transformation(xi: np.ndarray, xj: np.ndarray, roll: float = 0.0) -> tuple[n
         raise ValueError("coincident element nodes")
     ex = d / L
     ref = np.array([1.0, 0.0, 0.0]) if abs(ex[2]) > 1.0 - 1e-6 else np.array([0.0, 0.0, 1.0])
-    ey = np.cross(ref, ex)
+    ey = _cross3(ref, ex)
     ny = np.linalg.norm(ey)
     if ny < 1e-12:  # pragma: no cover - guarded by the reference switch above
         ref = np.array([0.0, 1.0, 0.0])
-        ey = np.cross(ref, ex)
+        ey = _cross3(ref, ex)
         ny = np.linalg.norm(ey)
     ey /= ny
-    ez = np.cross(ex, ey)
+    ez = _cross3(ex, ey)
     if roll:
         c, s = np.cos(roll), np.sin(roll)
         ey, ez = c * ey + s * ez, -s * ey + c * ez
