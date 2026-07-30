@@ -54,6 +54,7 @@ from tidetwin.report import ReportInputs, to_html, to_markdown, to_text
 from tidetwin.unlock import gate_status
 from tidetwin.ui import (
     cover,
+    svg_figure,
     dataframe,
     figure_block,
     claims_strip,
@@ -279,7 +280,12 @@ def sidebar() -> AnalysisConfig:
 
     s.markdown("**Record and Monte Carlo**")
     days = s.slider("Record length, days", 7.0, 90.0, 30.0, 1.0)
-    n_mc = s.select_slider("MC samples per channel", [50, 100, 200, 400, 800], value=200)
+    n_mc = s.select_slider("MC samples per channel", [50, 100, 200, 400, 800], value=100)
+    s.caption(
+        "100 keeps the app responsive and the C3 verdict is robust well below it; the "
+        "convergence trace flags honestly if a run has not settled. The exported ledger "
+        "uses 900 for publication precision. Raise this for a tighter interactive estimate."
+    )
     n_theta = s.select_slider("Response surface directions", [12, 24, 36, 72], value=24)
     seed = s.number_input("Random seed", 0, 2**31 - 1, 20260728, 1)
     s.caption(f"Seed {seed} is exported with every figure and table.")
@@ -429,6 +435,42 @@ def _code_fingerprint() -> str:
     except OSError:
         return "unavailable"
     return h.hexdigest()[:16]
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def jacket_3d(joint_id: int, title: str = "OC4 jacket, target joint marked") -> go.Figure:
+    """The 3D jacket blueprint, braces highlighted and the target joint marked.
+
+    Geometry only - no frame solve - so it is cheap and cached on the joint id.
+    Used on both the Overview and Structure tabs, so a reader sees the structure
+    under test immediately rather than only after scrolling to Structure.
+    """
+    j = TABLES.joints
+    fig = go.Figure()
+    for _mid, m in TABLES.members.iterrows():
+        a, b = j.loc[int(m.joint_i)], j.loc[int(m.joint_j)]
+        ps = int(m.prop_set)
+        braced = ps in (2, 3, 4)
+        fig.add_trace(
+            go.Scatter3d(
+                x=[a.x_m, b.x_m], y=[a.y_m, b.y_m], z=[a.z_m, b.z_m], mode="lines",
+                line=dict(color="#35b6c4" if braced else "#8a929b", width=4 if braced else 2),
+                showlegend=False, hoverinfo="skip",
+            )
+        )
+    sel = j.loc[joint_id]
+    fig.add_trace(
+        go.Scatter3d(
+            x=[sel.x_m], y=[sel.y_m], z=[sel.z_m], mode="markers",
+            marker=dict(size=7, color="#d1495b"), name=f"J{joint_id}",
+        )
+    )
+    fig.update_layout(
+        scene=dict(xaxis_title="x, m", yaxis_title="y, m", zaxis_title="z, m (SWL = 0)",
+                   aspectmode="data"),
+        title=title,
+    )
+    return fig
 
 
 def _cfg_key(cfg: AnalysisConfig) -> tuple:
@@ -663,14 +705,24 @@ with TABS[0]:
         section("How the method is supposed to work",
                 "tide to strain to ratio, and where a crack would enter")
         with panel("Method diagram"):
-            st.markdown(
+            svg_figure(
                 method_chain_svg(
                     nuisance_pct=(art.c3.effective_cv * 100) if art.c3 is not None else None,
                     signature_pct=CLAIMED_SIGNATURE,
                     verdict=c3.status.value if art.c3 is not None else "",
                 ),
-                unsafe_allow_html=True,
+                height=300,
             )
+
+        section("The structure under test", "OC4 reference jacket — drag to rotate")
+        figure_block(
+            jacket_3d(cfg.joint_id),
+            "overview_jacket",
+            f"Braces in accent, legs in grey, the target joint J{cfg.joint_id} marked. "
+            "The full geometry, an animated tidal-cycle simulation and the modal shapes are "
+            "on the Structure tab.",
+            460,
+        )
 
         if art.c3 is not None and art.c2_stiffness is not None:
             section("The two results the report rests on",
@@ -696,6 +748,12 @@ with TABS[0]:
                     "at all** already move the ratio by as much as a crack is claimed to. "
                     "The dashed lines and the histogram overlap; that overlap is the finding."
                 )
+                if getattr(_n, "measurement_mode", "single") != "rosette":
+                    st.caption(
+                        ":material/lightbulb: This is the paper's single-pair layout, so C3 "
+                        "fails as designed. Switch **Sensor layout for C3** in the sidebar to "
+                        "the four-gauge rosette to see the proposed fix bring this to a pass."
+                    )
             with gcol[1]:
                 _sr = art.c2_stiffness
                 fig = go.Figure()
@@ -769,33 +827,7 @@ with TABS[1]:
         with c[3]:
             quantity(published(len(K_JOINTS), "-", "braced leg joints", OC4_CITATION))
 
-        j = TABLES.joints
-        fig = go.Figure()
-        for _mid, m in TABLES.members.iterrows():
-            a, b = j.loc[int(m.joint_i)], j.loc[int(m.joint_j)]
-            ps = int(m.prop_set)
-            fig.add_trace(
-                go.Scatter3d(
-                    x=[a.x_m, b.x_m], y=[a.y_m, b.y_m], z=[a.z_m, b.z_m],
-                    mode="lines",
-                    line=dict(color="#35b6c4" if ps in (2, 3, 4) else "#8a929b", width=4 if ps in (2, 3, 4) else 2),
-                    showlegend=False, hoverinfo="skip",
-                )
-            )
-        sel = j.loc[cfg.joint_id]
-        fig.add_trace(
-            go.Scatter3d(
-                x=[sel.x_m], y=[sel.y_m], z=[sel.z_m], mode="markers",
-                marker=dict(size=7, color="#d1495b"), name=f"J{cfg.joint_id}",
-            )
-        )
-        fig.update_layout(
-            scene=dict(
-                xaxis_title="x, m", yaxis_title="y, m", zaxis_title="z, m (SWL = 0)",
-                aspectmode="data",
-            ),
-            title="OC4 jacket, target joint marked",
-        )
+        fig = jacket_3d(cfg.joint_id)
         figure_block(fig, "oc4_geometry", "Legs in accent, braces in grey. Mudline at z = -50.001 m.", 520)
 
         section("Tidal cycle simulation",
