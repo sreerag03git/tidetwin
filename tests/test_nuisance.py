@@ -467,8 +467,10 @@ def test_the_rosette_mode_cuts_the_nuisance_dispersion_by_an_order_of_magnitude(
     assert rosette.joint_cv < 0.5 * single.joint_cv, (
         f"rosette {rosette.joint_cv:.4f} should be far below single {single.joint_cv:.4f}"
     )
-    # The rosette solves four gauge positions, so it does strictly more work.
-    assert rosette.n_structural_solves > single.n_structural_solves
+    # The rosette reads four gauge angles, but they share one frame solve per
+    # grid cell, so it costs the SAME number of solves as the single pair. If a
+    # refactor ever reverts to solving each gauge separately, this catches it.
+    assert rosette.n_structural_solves == single.n_structural_solves
 
 
 def test_an_unknown_measurement_mode_is_refused():
