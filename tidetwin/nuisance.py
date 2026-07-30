@@ -57,12 +57,21 @@ from typing import Callable
 
 import numpy as np
 
-from .geometry.oc4 import SensorPair, build_jacket, load_tables
+from .geometry.oc4 import SensorPair, build_jacket, load_tables, sensor_pair
 from .loads.morison import HydroConfig
 from .loads.tides import TidalConstituents, constituent_frequency
 from .provenance import Quantity, assumed, derived
 from .response import ResponseSurface, build_response_surface
+from .rosette import ROSETTE_ANGLES_DEG, axial_drag_ratio
 from .signal.harmonic import fit_harmonics
+
+#: The two sensor layouts C3 can be evaluated under. ``"single"`` is the paper's
+#: own two-gauge pair; ``"rosette"`` is the four-gauge, direction-and-amplitude
+#: invariant layout that scripts/rosette_experiment.py shows takes the nuisance
+#: dispersion from 11.6 percent of the ratio to 1.2 percent. The default is the
+#: paper's, so the deciding verdict is always computed on the method as specified
+#: unless a reader deliberately asks for the proposed instrumentation.
+MEASUREMENT_MODES: tuple[str, ...] = ("single", "rosette")
 
 __all__ = [
     "NuisanceRanges",
@@ -356,6 +365,10 @@ class NuisanceResult:
     convergence: ConvergenceTrace | None = None
     decomposition: VarianceDecomposition | None = None
     break_even: BreakEven | None = None
+    #: Which sensor layout produced this budget: "single" (the paper's two-gauge
+    #: pair) or "rosette" (the proposed four-gauge, direction-and-amplitude
+    #: invariant layout). Carried so the verdict states which was measured.
+    measurement_mode: str = "single"
 
     @property
     def joint_cv(self) -> float:
@@ -572,6 +585,7 @@ def run_nuisance_budget(
     run_break_even: bool = True,
     signature_fraction: float = 0.111,
     threshold_fraction: float = 1.0 / 3.0,
+    estimator: str = "single",
     progress: Callable[[float, str], None] | None = None,
 ) -> NuisanceResult:
     """Propagate every nuisance channel through to the intact M2 strain ratio.
@@ -602,11 +616,52 @@ def run_nuisance_budget(
     rng = np.random.default_rng(seed)
     t = np.arange(0.0, record_days * 86400.0, sample_interval_s)
 
+    if estimator not in MEASUREMENT_MODES:
+        raise ValueError(
+            f"estimator must be one of {MEASUREMENT_MODES}, got {estimator!r}. "
+            "'single' is the paper's two-gauge pair; 'rosette' is the four-gauge layout."
+        )
     growth_axis = np.linspace(ranges.marine_growth_mm[0], ranges.marine_growth_mm[1], 3)
     scour_axis = np.array([ranges.scour_factor_range[0], 1.0])
     if progress:
         progress(0.05, "building structural response surfaces")
-    grid, n_solves = _structural_grid(pair, cfg, ljf_model, growth_axis, scour_axis, n_theta)
+
+    # The single-pair path is unchanged. The rosette path builds one structural
+    # grid per gauge angle, on the same joint and offset, and reduces each draw
+    # with the direction-and-amplitude-invariant estimator instead of the raw
+    # strain ratio. The draw logic below is byte-identical between the two, so
+    # the comparison is paired: only the reduction differs.
+    if estimator == "single":
+        grid, n_solves = _structural_grid(
+            pair, cfg, ljf_model, growth_axis, scour_axis, n_theta
+        )
+
+        def reduce_draw(d: dict, rg: np.random.Generator | None) -> float:
+            eu, el, _eta = _sample_series(
+                grid, growth_axis, scour_axis, constituents, t, d, ranges, rg
+            )
+            return ratio_from_series(t, eu, el)
+    else:
+        tables = load_tables()
+        pairs = [
+            sensor_pair(tables, pair.joint_id, pair.offset_m, np.radians(a))
+            for a in ROSETTE_ANGLES_DEG
+        ]
+        grids, n_solves = [], 0
+        for p in pairs:
+            g, s = _structural_grid(p, cfg, ljf_model, growth_axis, scour_axis, n_theta)
+            grids.append(g)
+            n_solves += s
+
+        def reduce_draw(d: dict, rg: np.random.Generator | None) -> float:
+            U, L, eta = [], [], None
+            for g in grids:
+                eu, el, eta = _sample_series(
+                    g, growth_axis, scour_axis, constituents, t, d, ranges, rg
+                )
+                U.append(eu)
+                L.append(el)
+            return axial_drag_ratio(t, U, L, eta)
 
     gated: dict[str, str] = {}
     if not era5_available:
@@ -620,10 +675,7 @@ def run_nuisance_budget(
             "range instead of a measured sea state."
         )
 
-    base_u, base_l = _sample_series(
-        grid, growth_axis, scour_axis, constituents, t, _zero_draw(), ranges
-    )
-    baseline = ratio_from_series(t, base_u, base_l)
+    baseline = reduce_draw(_zero_draw(), None)
 
     def make_draw(rg: np.random.Generator, rn: NuisanceRanges):
         def draw(active: set[str]) -> dict[str, float]:
@@ -669,8 +721,7 @@ def run_nuisance_budget(
         vals = np.empty(n_samples)
         for i in range(n_samples):
             d = draw({ch})
-            eu, el = _sample_series(grid, growth_axis, scour_axis, constituents, t, d, ranges, rng)
-            vals[i] = ratio_from_series(t, eu, el)
+            vals[i] = reduce_draw(d, rng)
         per_channel_samples[ch] = vals
         per_channel_sd[ch] = float(np.nanstd(vals, ddof=1))
 
@@ -684,8 +735,7 @@ def run_nuisance_budget(
         out = np.empty(n)
         for i in range(n):
             d = dr(set(CHANNELS))
-            eu, el = _sample_series(grid, growth_axis, scour_axis, constituents, t, d, rn, rg)
-            out[i] = ratio_from_series(t, eu, el)
+            out[i] = reduce_draw(d, rg)
         return out
 
     joint = joint_samples_for(ranges, n_samples, seed + 101)
@@ -743,6 +793,7 @@ def run_nuisance_budget(
         convergence=conv,
         decomposition=decomp,
         break_even=break_even,
+        measurement_mode=estimator,
     )
 
 
@@ -869,8 +920,14 @@ def _sample_series(
     d: dict[str, float],
     ranges: NuisanceRanges,
     rng: np.random.Generator | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """One realisation of the two strain series under a nuisance draw."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One realisation of the two strain series under a nuisance draw.
+
+    Returns ``(upper, lower, elevation)``. The elevation is the same series the
+    strains were evaluated against, so a rosette estimator can use it as the
+    phase reference for its drag projection without recomputing it and risking a
+    mismatch.
+    """
     con = constituents
     if d["ellipse_ratio"] != 0.0 or d["direction_bias"] != 0.0:
         con = TidalConstituents(
@@ -905,7 +962,7 @@ def _sample_series(
     if d["noise"] and rng is not None:
         eu = eu + rng.normal(0.0, d["noise"], size=eu.shape)
         el = el + rng.normal(0.0, d["noise"], size=el.shape)
-    return eu, el
+    return eu, el, eta
 
 
 def verdict(

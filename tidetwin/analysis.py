@@ -99,6 +99,11 @@ class AnalysisConfig:
     #: When set, tidal forcing is MEASURED and takes precedence over
     #: ``tide_table``. ``None`` falls back to the user table or the placeholder.
     tide_station: str | None = None
+    #: Sensor layout for the C3 deciding test. "single" is the paper's two-gauge
+    #: pair (the default, so the headline verdict is always on the method as
+    #: specified); "rosette" is the proposed four-gauge direction-and-amplitude
+    #: invariant layout that the experiment shows makes C3 pass.
+    measurement_mode: str = "single"
 
     def hydro(self) -> HydroConfig:
         return HydroConfig(
@@ -497,6 +502,7 @@ def run_full(cfg: AnalysisConfig, progress=None) -> Artifacts:
             n_theta=max(8, cfg.n_theta // 2),
             seed=cfg.seed,
             era5_available=art.era5_available,
+            estimator=cfg.measurement_mode,
         ),
     )
 

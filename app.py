@@ -252,6 +252,26 @@ def sidebar() -> AnalysisConfig:
     roughness = s.slider("Member roughness k, mm", 0.0, 100.0, 50.0, 5.0) * 1e-3
     growth = s.slider("Marine growth, mm", 0.0, 150.0, 0.0, 5.0)
 
+    _mode_label = {
+        "single": "Single gauge pair (as the paper specifies)",
+        "rosette": "Four-gauge rosette (proposed fix)",
+    }
+    measurement_mode = s.selectbox(
+        "Sensor layout for C3",
+        ["single", "rosette"],
+        format_func=lambda m: _mode_label[m],
+        help="The deciding test C3 depends on the sensor layout. The single pair is what "
+        "the paper specifies and what the headline verdict is computed on. The four-gauge "
+        "rosette is this app's proposed fix: a direction-and-amplitude-invariant estimator "
+        "that takes the nuisance dispersion from ~11 % of the ratio to ~1 %, enough to pass. "
+        "It costs about four times the run time because it solves four gauge positions.",
+    )
+    if measurement_mode == "rosette":
+        s.caption(
+            ":material/science: Proposed instrumentation, not the paper's. A C3 pass here "
+            "is what the improved layout achieves, and is labelled as such throughout."
+        )
+
     s.markdown("**Crack geometry**")
     s.caption("a/T and 2c are independent. There is no single percent-through-wall.")
     a_over_T = s.slider("a / T  (depth over wall thickness)", 0.05, 0.90, 0.50, 0.05)
@@ -311,6 +331,7 @@ def sidebar() -> AnalysisConfig:
         sensor_offset_m=offset,
         sensor_theta_deg=float(theta),
         ljf_model=ljf,
+        measurement_mode=measurement_mode,
         roughness_m=roughness,
         marine_growth_mm=growth,
         record_days=days,
@@ -420,7 +441,7 @@ def _cfg_key(cfg: AnalysisConfig) -> tuple:
         cfg.latitude, cfg.longitude, cfg.joint_id, cfg.sensor_offset_m, cfg.sensor_theta_deg,
         cfg.ljf_model.value, cfg.roughness_m, cfg.marine_growth_mm, cfg.record_days,
         cfg.crack_a_over_T, cfg.crack_2c_m, cfg.n_mc_samples, cfg.n_theta, cfg.seed, tide,
-        cfg.tide_station, _code_fingerprint(),
+        cfg.tide_station, cfg.measurement_mode, _code_fingerprint(),
     )
     _CFG_CACHE[k] = cfg
     return k
