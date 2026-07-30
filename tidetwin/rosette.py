@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .loads.tides import constituent_frequency
-from .signal.harmonic import fit_harmonics
+from .signal.harmonic import harmonic_amplitude_phase
 
 __all__ = [
     "ROSETTE_ANGLES_DEG",
@@ -81,9 +81,10 @@ def m2_phasor(times_s: np.ndarray, eps: np.ndarray, constituent: str = "M2") -> 
     if y.size == 0 or not np.any(np.isfinite(y)) or np.ptp(y[np.isfinite(y)]) == 0.0:
         return 0j
     om = np.array([float(constituent_frequency(constituent).value)])
-    f = fit_harmonics(np.asarray(times_s, float), y, (constituent,), om)
-    i = f.index(constituent)
-    return complex(f.amplitude[i] * np.exp(1j * f.phase[i]))
+    # Amplitude-and-phase fast path: byte-identical to fit_harmonics here, but
+    # without the standard-error machinery this per-draw call never uses.
+    amp, pha = harmonic_amplitude_phase(np.asarray(times_s, float), y, om)
+    return complex(amp[0] * np.exp(1j * pha[0]))
 
 
 @dataclass(frozen=True)

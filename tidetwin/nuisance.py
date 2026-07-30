@@ -63,7 +63,7 @@ from .loads.tides import TidalConstituents, constituent_frequency
 from .provenance import Quantity, assumed, derived
 from .response import ResponseSurface, build_response_surfaces
 from .rosette import ROSETTE_ANGLES_DEG, axial_drag_ratio
-from .signal.harmonic import fit_harmonics
+from .signal.harmonic import harmonic_amplitude_phase
 
 #: The two sensor layouts C3 can be evaluated under. ``"single"`` is the paper's
 #: own two-gauge pair; ``"rosette"`` is the four-gauge, direction-and-amplitude
@@ -495,13 +495,16 @@ def ratio_from_series(
     everywhere, so the number is comparable across runs; the reciprocal is
     reported alongside it in the UI so no reader has to guess the convention.
     """
+    # Amplitude-only fast path: this runs once per gauge per Monte Carlo draw,
+    # tens of thousands of times a budget, and needs only the M2 amplitude - not
+    # the standard errors fit_harmonics also computes. The amplitude it returns
+    # is bit-for-bit fit_harmonics', so the ratio is unchanged.
     om = np.array([float(constituent_frequency(constituent).value)])
-    fu = fit_harmonics(times_s, eps_upper, (constituent,), om)
-    fl = fit_harmonics(times_s, eps_lower, (constituent,), om)
-    au = fu.amplitude_of(constituent)
+    au = float(harmonic_amplitude_phase(times_s, eps_upper, om)[0][0])
     if au <= 0:
         return float("nan")
-    return float(fl.amplitude_of(constituent) / au)
+    al = float(harmonic_amplitude_phase(times_s, eps_lower, om)[0][0])
+    return al / au
 
 
 def _structural_grid(

@@ -19,6 +19,7 @@ from tidetwin.signal.detect import (
 from tidetwin.signal.harmonic import (
     effective_sample_size,
     fit_harmonics,
+    harmonic_amplitude_phase,
     rayleigh_check,
 )
 from tidetwin.signal.quadrature import decompose
@@ -203,3 +204,35 @@ def test_detection_time_reports_trials_that_never_detect():
     assert pct2["never_detected_fraction"] < 0.2
     assert np.isfinite(pct2["p50"])
     assert pct2["p05"] <= pct2["p50"] <= pct2["p95"]
+
+
+def test_amplitude_phase_fast_path_is_byte_identical_to_the_full_fit():
+    """The Monte Carlo fast path must return exactly what fit_harmonics does.
+
+    It exists only to skip the standard-error machinery the nuisance budget and
+    the rosette never read; the amplitude and phase it computes come from the
+    identical cached design matrix and the identical lstsq call, so they must
+    match to the last bit. Anything less would mean the ledger changed.
+    """
+    rng = np.random.default_rng(0)
+    t = np.arange(0.0, 14 * 86400.0, 1800.0)
+    om = np.array([float(constituent_frequency("M2").value)])
+    for _ in range(200):
+        y = rng.normal(size=t.size) * 1e-6 + 2e-6 * np.cos(om[0] * t - 0.4)
+        f = fit_harmonics(t, y, ("M2",), om)
+        amp, pha = harmonic_amplitude_phase(t, y, om)
+        assert amp[0] == f.amplitude[0]
+        assert pha[0] == f.phase[0]
+
+
+def test_cached_design_matrix_does_not_confuse_different_grids():
+    """The cache is keyed on the exact grid bytes, so two grids never collide."""
+    a = np.arange(0.0, 14 * 86400.0, 1800.0)
+    b = np.arange(0.0, 7 * 86400.0, 1800.0)  # different length and span
+    om = np.array([float(constituent_frequency("M2").value)])
+    ya = np.cos(om[0] * a)
+    yb = np.cos(om[0] * b)
+    assert harmonic_amplitude_phase(a, ya, om)[0][0] == pytest.approx(
+        fit_harmonics(a, ya, ("M2",), om).amplitude[0])
+    assert harmonic_amplitude_phase(b, yb, om)[0][0] == pytest.approx(
+        fit_harmonics(b, yb, ("M2",), om).amplitude[0])
