@@ -220,6 +220,12 @@ def assemble_hydrodynamic_load(
     model = build.model
     f = np.zeros(model.n_dof)
     eta = cfg.surface_elevation
+    # One dict lookup per member instead of a pandas .loc into the sections frame:
+    # this function runs a few hundred times per response surface and the .loc was
+    # creating a fresh Series on every member of every call - tens of thousands of
+    # them on a full budget, for a value that never changes. The numbers are
+    # identical; only the pandas overhead is gone.
+    outer_d = build.tables.sections["outer_diameter_m"].to_dict()
     for mid in build.submerged_members:
         mem = build.member_of[mid]
         pi = model.nodes[mem.node_i]
@@ -230,7 +236,7 @@ def assemble_hydrodynamic_load(
         wet = 1.0 if z_hi <= eta else (eta - z_lo) / max(z_hi - z_lo, 1e-9)
         z_mid_wet = 0.5 * (z_lo + min(z_hi, eta))
         mid_point = 0.5 * (pi + pj)
-        D = float(build.tables.sections.loc[mem.group, "outer_diameter_m"])
+        D = float(outer_d[mem.group])
         u = np.asarray(velocity_at(z_mid_wet, mid_point), float)
         a = (
             np.asarray(acceleration_at(z_mid_wet, mid_point), float)
