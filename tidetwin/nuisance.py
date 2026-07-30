@@ -61,7 +61,7 @@ from .geometry.oc4 import SensorPair, build_jacket, load_tables, sensor_pair
 from .loads.morison import HydroConfig
 from .loads.tides import TidalConstituents, constituent_frequency
 from .provenance import Quantity, assumed, derived
-from .response import ResponseSurface, build_response_surface
+from .response import ResponseSurface, build_response_surfaces
 from .rosette import ROSETTE_ANGLES_DEG, axial_drag_ratio
 from .signal.harmonic import fit_harmonics
 
@@ -512,13 +512,35 @@ def _structural_grid(
     scour_factors: np.ndarray,
     n_theta: int,
 ) -> tuple[list[list[ResponseSurface]], int]:
-    """Response surfaces over the (marine growth, scour) grid."""
+    """Response surfaces for one pair over the (marine growth, scour) grid."""
+    grids, solves = _structural_grids(
+        [pair], cfg, ljf_model, growth_mm, scour_factors, n_theta
+    )
+    return grids[0], solves
+
+
+def _structural_grids(
+    pairs: list[SensorPair],
+    cfg: HydroConfig,
+    ljf_model,
+    growth_mm: np.ndarray,
+    scour_factors: np.ndarray,
+    n_theta: int,
+) -> tuple[list[list[list[ResponseSurface]]], int]:
+    """Response surfaces for several pairs over the (marine growth, scour) grid.
+
+    Returns one grid per pair, ``grids[p][gi][si]``. Each (growth, scour) cell
+    builds the jacket once and solves the frame once, recovering strain at every
+    pair from the shared solution - so a four-gauge rosette costs one solve set
+    per cell, not four. ``n_solves`` is the true number of frame solves, which is
+    the same as for a single pair.
+    """
     tables = load_tables()
     K_ref = None
-    grid: list[list[ResponseSurface]] = []
+    grids: list[list[list[ResponseSurface]]] = [[] for _ in pairs]
     solves = 0
     for g in growth_mm:
-        row: list[ResponseSurface] = []
+        rows: list[list[ResponseSurface]] = [[] for _ in pairs]
         for sf in scour_factors:
             if K_ref is None:
                 probe = build_jacket(ljf_model=ljf_model)
@@ -533,11 +555,13 @@ def _structural_grid(
                 tables=tables,
             )
             c = replace(cfg, marine_growth_mm=float(g))
-            s = build_response_surface(b, pair, c, n_theta=n_theta)
-            solves += s.n_solves
-            row.append(s)
-        grid.append(row)
-    return grid, solves
+            surfaces = build_response_surfaces(b, pairs, c, n_theta=n_theta)
+            solves += surfaces[0].n_solves  # shared across pairs, so count once
+            for p, s in enumerate(surfaces):
+                rows[p].append(s)
+        for p in range(len(pairs)):
+            grids[p].append(rows[p])
+    return grids, solves
 
 
 def _interp_surface_eval(
@@ -647,11 +671,12 @@ def run_nuisance_budget(
             sensor_pair(tables, pair.joint_id, pair.offset_m, np.radians(a))
             for a in ROSETTE_ANGLES_DEG
         ]
-        grids, n_solves = [], 0
-        for p in pairs:
-            g, s = _structural_grid(p, cfg, ljf_model, growth_axis, scour_axis, n_theta)
-            grids.append(g)
-            n_solves += s
+        # One jacket build and one frame solve per grid cell, strain recovered at
+        # all four gauge angles from the shared solution - so the rosette costs
+        # about the same as the single pair, not four times as much.
+        grids, n_solves = _structural_grids(
+            pairs, cfg, ljf_model, growth_axis, scour_axis, n_theta
+        )
 
         def reduce_draw(d: dict, rg: np.random.Generator | None) -> float:
             U, L, eta = [], [], None

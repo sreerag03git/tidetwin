@@ -29,7 +29,12 @@ from .geometry.oc4 import JacketBuild, SensorPair
 from .loads.buoyancy import assemble_buoyancy_load
 from .loads.morison import HydroConfig, assemble_hydrodynamic_load, current_profile_factor
 
-__all__ = ["ResponseSurface", "build_response_surface", "strain_series"]
+__all__ = [
+    "ResponseSurface",
+    "build_response_surface",
+    "build_response_surfaces",
+    "strain_series",
+]
 
 
 @dataclass(frozen=True)
@@ -102,12 +107,40 @@ def build_response_surface(
     eta_levels: np.ndarray | None = None,
     flooded_legs: bool = True,
 ) -> ResponseSurface:
-    """Precompute the strain response grid.
+    """Precompute the strain response grid for one sensor pair.
+
+    Thin wrapper over :func:`build_response_surfaces`; see there for the method.
+    """
+    return build_response_surfaces(
+        build, [pair], cfg, n_theta=n_theta, eta_levels=eta_levels,
+        flooded_legs=flooded_legs,
+    )[0]
+
+
+def build_response_surfaces(
+    build: JacketBuild,
+    pairs: list[SensorPair],
+    cfg: HydroConfig,
+    n_theta: int = 36,
+    eta_levels: np.ndarray | None = None,
+    flooded_legs: bool = True,
+) -> list[ResponseSurface]:
+    """Precompute the strain response grid for several sensor pairs at once.
 
     Uses one sparse LU factorisation of the stiffness matrix and reuses it for
     every right-hand side, which is what keeps the cost at seconds rather than
     minutes. Exploits ``eps(theta + pi) = -eps(theta)`` to halve the solve count.
+
+    The key optimisation for a gauge rosette: the frame solve depends only on the
+    loading, not on where the strain is read, so a single displacement solution
+    feeds every pair. Reading strain at a gauge is a couple of array lookups;
+    solving the frame is a sparse back-substitution. Building four pairs
+    together therefore costs one solve set plus cheap strain recovery, not four
+    solve sets - the ``n_solves`` reported is the same as for a single pair.
     """
+    if not pairs:
+        raise ValueError("build_response_surfaces needs at least one sensor pair")
+
     K, _ = build.model.assemble()
     free = build.model.free_dof()
     lu = spla.splu(sp.csc_matrix(K[free][:, free]))
@@ -117,9 +150,6 @@ def build_response_surface(
         u[free] = lu.solve(f[free])
         return u
 
-    def strains(u: np.ndarray) -> tuple[float, float]:
-        return build.pair_strains(u, pair)
-
     eta = (
         np.asarray(eta_levels, float)
         if eta_levels is not None
@@ -127,11 +157,12 @@ def build_response_surface(
     )
     theta = np.linspace(0.0, 2.0 * np.pi, n_theta, endpoint=False)
     half = n_theta // 2
+    n_p = len(pairs)
 
-    drag_u = np.zeros((n_theta, eta.size))
-    drag_l = np.zeros((n_theta, eta.size))
-    buoy_u = np.zeros(eta.size)
-    buoy_l = np.zeros(eta.size)
+    drag_u = np.zeros((n_p, n_theta, eta.size))
+    drag_l = np.zeros((n_p, n_theta, eta.size))
+    buoy_u = np.zeros((n_p, eta.size))
+    buoy_l = np.zeros((n_p, eta.size))
     n_solves = 0
 
     for j, e in enumerate(eta):
@@ -144,9 +175,10 @@ def build_response_surface(
             marine_growth_mm=cfg.marine_growth_mm,
         )
         fb = assemble_buoyancy_load(build, float(e), cfg.water_density, flooded=flooded_legs)
-        ub, lb = strains(solve(fb))
-        buoy_u[j], buoy_l[j] = ub, lb
+        ub = solve(fb)
         n_solves += 1
+        for p, pair in enumerate(pairs):
+            buoy_u[p, j], buoy_l[p, j] = build.pair_strains(ub, pair)
 
         for i in range(half):
             th = float(theta[i])
@@ -158,26 +190,31 @@ def build_response_surface(
                 )
 
             f = assemble_hydrodynamic_load(build, vel, cfg_e)
-            du, dl = strains(solve(f))
+            ud = solve(f)
             n_solves += 1
-            drag_u[i, j], drag_l[i, j] = du, dl
-            # Reversing the current negates the drag load exactly.
-            drag_u[i + half, j], drag_l[i + half, j] = -du, -dl
+            for p, pair in enumerate(pairs):
+                du, dl = build.pair_strains(ud, pair)
+                drag_u[p, i, j], drag_l[p, i, j] = du, dl
+                # Reversing the current negates the drag load exactly.
+                drag_u[p, i + half, j], drag_l[p, i + half, j] = -du, -dl
 
     # Reference state: mean water level, no current.
     j_ref = int(np.argmin(np.abs(eta)))
-    return ResponseSurface(
-        theta=theta,
-        eta=eta,
-        drag_upper=drag_u,
-        drag_lower=drag_l,
-        buoy_upper=buoy_u,
-        buoy_lower=buoy_l,
-        still_upper=float(buoy_u[j_ref]),
-        still_lower=float(buoy_l[j_ref]),
-        pair=pair,
-        n_solves=n_solves,
-    )
+    return [
+        ResponseSurface(
+            theta=theta,
+            eta=eta,
+            drag_upper=drag_u[p],
+            drag_lower=drag_l[p],
+            buoy_upper=buoy_u[p],
+            buoy_lower=buoy_l[p],
+            still_upper=float(buoy_u[p, j_ref]),
+            still_lower=float(buoy_l[p, j_ref]),
+            pair=pair,
+            n_solves=n_solves,
+        )
+        for p, pair in enumerate(pairs)
+    ]
 
 
 def strain_series(

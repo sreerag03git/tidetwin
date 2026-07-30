@@ -217,3 +217,43 @@ def test_roughness_moves_cd_between_the_api_smooth_and_rough_values():
     assert "transitional" in note
     with pytest.raises(ValueError):
         drag_inertia_coefficients(0.0, 0.05)
+
+
+def test_shared_solve_matches_separate_builds_exactly():
+    """The rosette optimisation: one frame solve feeds every gauge angle.
+
+    build_response_surfaces must return, for each pair, exactly what
+    build_response_surface would have returned building it alone - the frame
+    solve does not depend on where strain is read, so sharing it changes
+    nothing but the cost. A single digit of difference would mean the shared
+    solve had corrupted one pair's recovery.
+    """
+    from tidetwin.rosette import ROSETTE_ANGLES_DEG
+    from tidetwin.response import build_response_surfaces
+
+    tables = load_tables()
+    build = build_jacket(ljf_model=LJFModel.RIGID, tables=tables)
+    eta = np.linspace(-2.0, 2.0, 5)
+    pairs = [sensor_pair(tables, 5, 1.5, np.radians(a)) for a in ROSETTE_ANGLES_DEG]
+
+    separate = [build_response_surface(build, p, CFG, n_theta=16, eta_levels=eta) for p in pairs]
+    shared = build_response_surfaces(build, pairs, CFG, n_theta=16, eta_levels=eta)
+
+    for sep, sh in zip(separate, shared):
+        assert np.array_equal(sep.drag_upper, sh.drag_upper)
+        assert np.array_equal(sep.drag_lower, sh.drag_lower)
+        assert np.array_equal(sep.buoy_upper, sh.buoy_upper)
+        assert np.array_equal(sep.buoy_lower, sh.buoy_lower)
+        assert sep.still_upper == sh.still_upper
+
+    # Four gauges, but the solve count is that of a single pair - the whole point.
+    assert shared[0].n_solves == separate[0].n_solves
+
+
+def test_shared_build_rejects_an_empty_pair_list():
+    from tidetwin.response import build_response_surfaces
+
+    tables = load_tables()
+    build = build_jacket(ljf_model=LJFModel.RIGID, tables=tables)
+    with pytest.raises(ValueError, match="at least one"):
+        build_response_surfaces(build, [], CFG, n_theta=8)
