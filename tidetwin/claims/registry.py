@@ -354,6 +354,18 @@ def _c3(art: Artifacts) -> ClaimResult:
     n = art.c3
     status_txt, msg = verdict_against_claimed_signature(n, 0.111)
     status = Status(status_txt) if status_txt in Status._value2member_map_ else Status.FAIL
+
+    # A pass under the proposed rosette must never read as the paper's own method
+    # passing. The layout is stamped on the front of the verdict, before anything
+    # else, whenever it is not the single pair the paper specifies.
+    rosette = getattr(n, "measurement_mode", "single") == "rosette"
+    if rosette:
+        msg = (
+            "MEASURED WITH THE PROPOSED FOUR-GAUGE ROSETTE, not the paper's single pair. "
+            "Under the layout the paper specifies this test fails; the result below is what "
+            "the direction-and-amplitude-invariant estimator achieves, and it is offered as "
+            "a fix, not as a defence of the method as written. " + msg
+        )
     if status is Status.FAIL and not np.isfinite(n.joint_sd):
         return ClaimResult(
             "C3", Status.UNTESTABLE_DATA, "sigma not finite",
@@ -408,6 +420,8 @@ def _c3(art: Artifacts) -> ClaimResult:
         if n.heavy_tailed
         else f"sigma = {n.joint_cv * 100:.2f} % of the intact ratio"
     )
+    if rosette:
+        computed += " (proposed rosette layout)"
     return ClaimResult("C3", status, computed, detail, _contamination(art))
 
 

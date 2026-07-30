@@ -432,3 +432,55 @@ def test_only_draws_past_the_signature_count():
 
 def test_a_degenerate_baseline_reports_nan_rather_than_dividing_by_zero():
     assert np.isnan(_res(np.ones(10), baseline=0.0).false_alarm_fraction())
+
+
+# ---------------------------------------------------------------------------
+# The selectable measurement mode: the rosette estimator wired through the real
+# nuisance budget, not just the standalone experiment.
+
+
+def _budget(mode, **kw):
+    from tidetwin.analysis import AnalysisConfig
+    from tidetwin.geometry.oc4 import load_tables, sensor_pair
+    from tidetwin.nuisance import run_nuisance_budget
+
+    cfg = AnalysisConfig()
+    tables = load_tables()
+    pair = sensor_pair(tables, cfg.joint_id, cfg.sensor_offset_m, 0.0)
+    return run_nuisance_budget(
+        pair, cfg.constituents(), cfg.hydro(), ljf_model=cfg.ljf_model,
+        n_samples=40, record_days=7.0, n_theta=8, run_break_even=False,
+        estimator=mode, **kw,
+    )
+
+
+def test_the_rosette_mode_cuts_the_nuisance_dispersion_by_an_order_of_magnitude():
+    """The whole point of offering it: single fails, rosette passes.
+
+    Same joint, same tide, same channels - only the estimator differs. If this
+    ever regresses to the two being comparable, the fix has silently broken.
+    """
+    single = _budget("single")
+    rosette = _budget("rosette")
+    assert single.measurement_mode == "single"
+    assert rosette.measurement_mode == "rosette"
+    assert rosette.joint_cv < 0.5 * single.joint_cv, (
+        f"rosette {rosette.joint_cv:.4f} should be far below single {single.joint_cv:.4f}"
+    )
+    # The rosette solves four gauge positions, so it does strictly more work.
+    assert rosette.n_structural_solves > single.n_structural_solves
+
+
+def test_an_unknown_measurement_mode_is_refused():
+    with pytest.raises(ValueError, match="estimator must be one of"):
+        _budget("quadruple-pair-with-sprinkles")
+
+
+def test_the_rosette_verdict_declares_the_layout_so_a_pass_is_not_misread():
+    from tidetwin.claims.registry import Artifacts, evaluate
+    from tidetwin.claims.registry import CLAIMS
+
+    c3 = next(c for c in CLAIMS if c.id == "C3")
+    res = evaluate(c3, Artifacts(c3=_budget("rosette")))
+    assert "PROPOSED FOUR-GAUGE ROSETTE" in res.detail
+    assert "proposed rosette layout" in res.computed_text
