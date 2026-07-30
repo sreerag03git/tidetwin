@@ -539,31 +539,34 @@ def _structural_grids(
     the same as for a single pair.
     """
     tables = load_tables()
-    K_ref = None
-    grids: list[list[list[ResponseSurface]]] = [[] for _ in pairs]
+    n_g, n_s = len(growth_mm), len(scour_factors)
+    # grids[p][growth_index][scour_index]
+    grids: list[list[list[ResponseSurface]]] = [
+        [[None] * n_s for _ in range(n_g)] for _ in pairs  # type: ignore[list-item]
+    ]
     solves = 0
-    for g in growth_mm:
-        rows: list[list[ResponseSurface]] = [[] for _ in pairs]
-        for sf in scour_factors:
-            if K_ref is None:
-                probe = build_jacket(ljf_model=ljf_model)
-                Kp, _ = probe.model.assemble()
-                d = Kp.diagonal()
-                K_ref = float(np.mean(d[d > 0]))
-            found = None if sf >= 0.999 else K_ref * float(sf)
-            b = build_jacket(
-                ljf_model=ljf_model,
-                marine_growth_mm=float(g),
-                foundation_stiffness=found,
-                tables=tables,
-            )
+
+    # Marine growth changes the stiffness matrix not at all - it enters the model
+    # only as added mass, which a static response surface never uses, and it
+    # enters the drag through the HydroConfig, not the build. Verified: the
+    # surface is bit-for-bit identical whether the jacket carries the growth or
+    # not (scripts and tests/test_response). Scour is the only thing that changes
+    # the structure. So the jacket is built once per scour value and reused
+    # across every growth value, instead of rebuilt in all n_g x n_s cells.
+    probe = build_jacket(ljf_model=ljf_model, tables=tables)
+    Kp, _ = probe.model.assemble()
+    d = Kp.diagonal()
+    K_ref = float(np.mean(d[d > 0]))
+
+    for si, sf in enumerate(scour_factors):
+        found = None if sf >= 0.999 else K_ref * float(sf)
+        b = build_jacket(ljf_model=ljf_model, foundation_stiffness=found, tables=tables)
+        for gi, g in enumerate(growth_mm):
             c = replace(cfg, marine_growth_mm=float(g))
             surfaces = build_response_surfaces(b, pairs, c, n_theta=n_theta)
             solves += surfaces[0].n_solves  # shared across pairs, so count once
             for p, s in enumerate(surfaces):
-                rows[p].append(s)
-        for p in range(len(pairs)):
-            grids[p].append(rows[p])
+                grids[p][gi][si] = s
     return grids, solves
 
 
