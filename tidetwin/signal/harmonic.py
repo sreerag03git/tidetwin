@@ -36,7 +36,76 @@ import numpy as np
 
 from ..numerics import norm_ppf
 
-__all__ = ["HarmonicFit", "fit_harmonics", "rayleigh_check", "effective_sample_size"]
+__all__ = [
+    "HarmonicFit",
+    "fit_harmonics",
+    "harmonic_amplitude_phase",
+    "rayleigh_check",
+    "effective_sample_size",
+]
+
+#: Design matrices are rebuilt identically thousands of times in the nuisance
+#: Monte Carlo - the same time vector and the same M2 frequency on every draw.
+#: They are cached here keyed on the exact bytes of (t, omega, trend), so the
+#: cached matrix is bit-for-bit the one that would have been built, and any fit
+#: that reuses it is byte-identical to one that did not.
+_DESIGN_CACHE: dict[bytes, tuple[np.ndarray, list[str], int]] = {}
+
+
+def _design_matrix(
+    t: np.ndarray, omega: np.ndarray, include_trend: bool
+) -> tuple[np.ndarray, list[str], int]:
+    """The regression design matrix ``X``, its column labels, and ``k0``.
+
+    ``k0`` is the index of the first constituent column (after mean and trend).
+    Cached on the exact inputs; the cache holds one entry per distinct grid, of
+    which a whole budget has exactly one.
+    """
+    key = t.tobytes() + b"|" + omega.tobytes() + (b"|T" if include_trend else b"|F")
+    hit = _DESIGN_CACHE.get(key)
+    if hit is not None:
+        return hit
+    n = t.size
+    cols = [np.ones(n)]
+    labels = ["mean"]
+    if include_trend:
+        cols.append(t - t.mean())
+        labels.append("trend")
+    for w in omega:
+        cols.append(np.cos(w * t))
+        cols.append(np.sin(w * t))
+    X = np.column_stack(cols)
+    k0 = 2 if include_trend else 1
+    out = (X, labels, k0)
+    if len(_DESIGN_CACHE) < 32:  # bounded; a run uses one or two grids
+        _DESIGN_CACHE[key] = out
+    return out
+
+
+def harmonic_amplitude_phase(
+    t: np.ndarray,
+    y: np.ndarray,
+    omega: np.ndarray,
+    include_trend: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Constituent amplitudes and phases only - the fast path for the Monte Carlo.
+
+    :func:`fit_harmonics` also returns standard errors, which cost a matrix
+    pseudo-inverse, a residual, a delta-method loop and a Rayleigh check on every
+    call. The nuisance budget and the rosette estimator use none of that - they
+    divide one amplitude by another - so this computes the regression
+    coefficients with the identical cached design matrix and the identical
+    ``lstsq`` call, and stops there. The amplitude and phase are bit-for-bit what
+    :func:`fit_harmonics` reports; only the discarded work is skipped.
+    """
+    t = np.asarray(t, float).ravel()
+    y = np.asarray(y, float).ravel()
+    omega = np.asarray(omega, float).ravel()
+    X, _labels, k0 = _design_matrix(t, omega, include_trend)
+    coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+    a = coef[k0::2][: omega.size]
+    b = coef[k0 + 1 :: 2][: omega.size]
+    return np.hypot(a, b), np.arctan2(b, a)
 
 
 @dataclass(frozen=True)
@@ -162,15 +231,7 @@ def fit_harmonics(
             f"needs at least {_days_needed(omega, names, unresolved):.1f} d"
         )
 
-    cols = [np.ones(n)]
-    labels = ["mean"]
-    if include_trend:
-        cols.append(t - t.mean())
-        labels.append("trend")
-    for w in omega:
-        cols.append(np.cos(w * t))
-        cols.append(np.sin(w * t))
-    X = np.column_stack(cols)
+    X, labels, _k0 = _design_matrix(t, omega, include_trend)
     if X.shape[0] <= X.shape[1]:
         raise ValueError(
             f"{n} samples cannot determine {X.shape[1]} parameters; lengthen the record"
