@@ -17,7 +17,10 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
-from scipy.special import gammainc, ndtr, ndtri
+# scipy.special is imported inside the four functions below, not here, so that
+# importing this module - which happens on the deployed app's cold start,
+# transitively, long before any statistics are needed - does not load scipy.
+# Re-importing inside a function is a dict lookup after the first call.
 
 __all__ = [
     "bisect_root",
@@ -75,16 +78,19 @@ def bisect_root(
 
 def norm_cdf(x: np.ndarray | float) -> np.ndarray | float:
     """Standard normal CDF."""
+    from scipy.special import ndtr
     return ndtr(x)
 
 
 def norm_sf(x: np.ndarray | float) -> np.ndarray | float:
     """Standard normal survival function, ``1 - Phi(x)``, accurate in the tail."""
+    from scipy.special import ndtr
     return ndtr(-np.asarray(x))
 
 
 def norm_ppf(p: np.ndarray | float) -> np.ndarray | float:
     """Standard normal quantile function."""
+    from scipy.special import ndtri
     return ndtri(p)
 
 
@@ -93,6 +99,7 @@ def chi2_cdf(x: np.ndarray | float, df: int) -> np.ndarray | float:
 
     ``F(x; k) = P(k/2, x/2)`` (Abramowitz & Stegun 26.4.19).
     """
+    from scipy.special import gammainc
     return gammainc(0.5 * df, 0.5 * np.asarray(x, dtype=float))
 
 

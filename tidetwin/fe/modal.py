@@ -9,12 +9,14 @@ solves matters more than absolute accuracy.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # scipy is imported lazily inside functions at runtime;
+    import scipy.sparse as sp  # this makes the sparse-matrix annotations resolvable
+
 from dataclasses import dataclass
 
 import numpy as np
-import scipy.linalg as sla
-import scipy.sparse as sp
-import scipy.sparse.linalg as spla
 
 __all__ = ["ModalResult", "eigenmodes", "frequency_shift"]
 
@@ -63,6 +65,9 @@ def eigenmodes(
     DOF. The shift is placed slightly below zero so the factorisation targets the
     lowest modes without hitting the rigid-body singularity.
     """
+    import scipy.linalg as sla
+    import scipy.sparse.linalg as spla
+
     Kff = K[free_dof][:, free_dof]
     Mff = M[free_dof][:, free_dof]
     n_free = Kff.shape[0]

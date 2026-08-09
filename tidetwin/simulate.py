@@ -23,8 +23,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import scipy.sparse as sp
-import scipy.sparse.linalg as spla
 
 from .geometry.oc4 import JacketBuild, SensorPair
 from .loads.buoyancy import assemble_buoyancy_load
@@ -79,6 +77,9 @@ def simulate_cycle(
 
     uv = constituents.depth_averaged_current(t_s)
     eta = constituents.elevation(t_s)
+
+    import scipy.sparse as sp
+    import scipy.sparse.linalg as spla
 
     K, _ = build.model.assemble()
     free = build.model.free_dof()

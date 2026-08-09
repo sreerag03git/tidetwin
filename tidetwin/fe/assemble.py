@@ -9,11 +9,14 @@ frame analysis (ISO 19902:2020 Section 13.7, Buitrago et al. 1993).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # scipy is imported lazily inside functions at runtime;
+    import scipy.sparse as sp  # this makes the sparse-matrix annotations resolvable
+
 from dataclasses import dataclass, field
 
 import numpy as np
-import scipy.sparse as sp
-import scipy.sparse.linalg as spla
 
 from .beam3d import Section, element_matrices
 
@@ -100,6 +103,8 @@ class Model:
 
     def assemble(self, lumped_mass: bool = False) -> tuple[sp.csr_matrix, sp.csr_matrix]:
         """Assemble global stiffness ``K`` and mass ``M`` as sparse CSR."""
+        import scipy.sparse as sp
+
         n = self.n_dof
         rows: list[np.ndarray] = []
         cols: list[np.ndarray] = []
@@ -139,6 +144,8 @@ class Model:
 
     def _spring_stiffness(self, K: sp.csr_matrix) -> sp.csr_matrix:
         """Assemble spring links. Infinite stiffness becomes a scaled penalty."""
+        import scipy.sparse as sp
+
         n = self.n_dof
         diag = K.diagonal()
         scale = float(np.mean(diag[diag > 0])) if np.any(diag > 0) else 1.0
@@ -191,6 +198,8 @@ class Model:
 
         ``load`` may be ``(n_dof,)`` or ``(n_nodes, 6)``.
         """
+        import scipy.sparse.linalg as spla
+
         f = np.asarray(load, dtype=float).reshape(-1)
         if f.size != self.n_dof:
             raise ValueError(f"load vector has {f.size} entries, expected {self.n_dof}")

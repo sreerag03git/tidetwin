@@ -202,3 +202,36 @@ def test_every_name_app_imports_from_ui_actually_exists():
     assert wanted, "app.py should import from tidetwin.ui"
     missing = [n for n in wanted if not hasattr(ui, n)]
     assert not missing, f"app.py imports names tidetwin.ui does not export: {missing}"
+
+
+def test_the_cold_start_path_does_not_import_scipy():
+    """scipy is heavy - tens of MB and a slow import - and the deployed app's
+    cold start shows the precomputed result without ever solving, so it should
+    not pay to load it. This runs the load path in a fresh interpreter and checks
+    scipy never entered sys.modules. If a solver module regains a module-level
+    scipy import, the deployed container's startup gets heavier and this fails.
+
+    Run in a subprocess because sys.modules is process-global: other tests import
+    scipy, so only a clean interpreter can measure the cold-start surface.
+    """
+    import os
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "sys.path.insert(0, r'" + str(ROOT) + "')\n"
+        "import tidetwin.claims.registry, tidetwin.ui, tidetwin.geometry.oc4\n"
+        "from tidetwin.precompute import load_bundle\n"
+        "b = load_bundle()\n"
+        "assert b is not None, 'bundle did not load'\n"
+        "hit = sorted(m for m in sys.modules if m.split('.')[0] == 'scipy')\n"
+        "assert not hit, 'scipy imported on the cold-start path: ' + repr(hit)\n"
+        "print('OK')\n"
+    )
+    env = dict(os.environ, PYTHONPATH=str(ROOT))
+    r = subprocess.run(
+        [sys.executable, "-c", code], cwd=str(ROOT), env=env,
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 0, f"cold-start pulled scipy or failed:\n{r.stdout}\n{r.stderr}"

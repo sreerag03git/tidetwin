@@ -33,7 +33,6 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy as np
-import scipy.linalg as sla
 
 __all__ = ["EnKFConfig", "enkf_update", "inflate", "LogEnKF"]
 
@@ -100,6 +99,8 @@ def enkf_update(
         return X + K @ (y[:, None] + noise - H @ X)
 
     # Ensemble transform: A_a = A T with T = (I + S^T R^-1 S)^(-1/2).
+    import scipy.linalg as sla
+
     S = (H @ A) / np.sqrt(N - 1)
     M = np.eye(N) + S.T @ np.linalg.inv(R) @ S
     w, V = sla.eigh(M)

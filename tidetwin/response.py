@@ -22,8 +22,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import scipy.sparse as sp
-import scipy.sparse.linalg as spla
 
 from .geometry.oc4 import JacketBuild, SensorPair
 from .loads.buoyancy import assemble_buoyancy_load
@@ -140,6 +138,13 @@ def build_response_surfaces(
     """
     if not pairs:
         raise ValueError("build_response_surfaces needs at least one sensor pair")
+
+    # scipy is imported here, not at module top, so the deployed app's cold start
+    # - which shows the precomputed result and never solves - does not pay to load
+    # it. It costs a few tens of MB and a noticeable fraction of a second, and is
+    # only needed once the user actually asks for a run.
+    import scipy.sparse as sp
+    import scipy.sparse.linalg as spla
 
     K, _ = build.model.assemble()
     free = build.model.free_dof()
