@@ -1,6 +1,10 @@
 # TideTwin runtime dependencies. Every version is pinned exactly: a claims
 # ledger that cannot be reproduced is not evidence.
 #
+# A touch to this file makes Streamlit Cloud rebuild the whole environment rather
+# than just rerun the app, which is the cure when a container comes up with a
+# half-installed environment (the "ImportError at the first import" symptom).
+#
 # The solvers deliberately use only numpy, scipy.linalg, scipy.sparse and
 # scipy.special. scipy.optimize, .interpolate, .stats, .signal and .integrate
 # are NOT used - see tidetwin/numerics.py for why - which keeps the import

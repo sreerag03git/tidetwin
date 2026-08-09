@@ -166,3 +166,39 @@ def test_every_pin_supports_the_declared_python():
         f"only {checked} pinned packages were installed here, so this test proved "
         "almost nothing; install requirements.txt to make it meaningful"
     )
+
+
+def test_the_app_ui_module_imports_on_this_platform():
+    """The deployed app failed at 'from tidetwin.ui import ...' with a redacted
+    ImportError, and nothing else here imported that module - so a real Linux
+    import break would have passed CI. Importing it on the CI OS (which is the
+    deploy OS) closes that gap: if streamlit, plotly, the components bridge or the
+    module's own theme construction cannot load here, this is where it shows.
+    """
+    import importlib
+
+    ui = importlib.import_module("tidetwin.ui")
+    # The theme f-strings are built at import time; make sure they materialised.
+    assert "<style>" in ui._CSS
+    assert callable(ui.running_reporter)
+
+
+def test_every_name_app_imports_from_ui_actually_exists():
+    """Guards against 'cannot import name X from tidetwin.ui' - the exact shape of
+    the deployed failure - without running the Streamlit app (which cannot run
+    outside a Streamlit runtime). Parses app.py's import block and checks each
+    name against the module, so a rename in ui.py that app.py has not caught up
+    with fails here rather than on Cloud.
+    """
+    import ast
+    import importlib
+
+    ui = importlib.import_module("tidetwin.ui")
+    tree = ast.parse((ROOT / "app.py").read_text("utf-8"))
+    wanted: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "tidetwin.ui":
+            wanted.extend(alias.name for alias in node.names)
+    assert wanted, "app.py should import from tidetwin.ui"
+    missing = [n for n in wanted if not hasattr(ui, n)]
+    assert not missing, f"app.py imports names tidetwin.ui does not export: {missing}"
