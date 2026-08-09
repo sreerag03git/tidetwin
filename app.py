@@ -8,6 +8,7 @@ Run with::
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 # Make `import tidetwin` work without PYTHONPATH being set. Streamlit Cloud runs
@@ -559,8 +560,10 @@ _boot = st.empty()
 # across the top of the page rather than as a thin bar in the sidebar.
 _run_overlay = st.empty()
 _first = "booted" not in st.session_state
+_splash_start = None
 if _first:
     _boot.markdown(loading_screen(), unsafe_allow_html=True)
+    _splash_start = time.perf_counter()
 st.session_state.booted = True
 
 if "full" not in st.session_state:
@@ -581,6 +584,14 @@ if _first and st.session_state.full is None:
         st.session_state.full = b["full"]
         st.session_state.full_cfg = b["cfg"]
         st.session_state.full_key = _cfg_key(b["cfg"])
+# The precomputed result loads in a blink, so hold the branded splash on screen
+# long enough to be seen and for its animation to play - a deliberate ~1.7 s
+# intro on the first visit only, not a recomputed wait. It is a rendered page
+# with a CSS animation, so it costs nothing on the server.
+if _splash_start is not None:
+    _held = time.perf_counter() - _splash_start
+    if _held < 1.7:
+        time.sleep(1.7 - _held)
 _boot.empty()
 
 # A code reload or a redeploy re-defines the dataclasses, which leaves anything

@@ -333,23 +333,61 @@ def inject_theme() -> None:
 
 _BOOT_CSS = f"""
 <style>
+@keyframes ttslide {{
+  0% {{ transform:translateX(-100%); }}
+  100% {{ transform:translateX(320%); }}
+}}
+@keyframes ttrise {{
+  from {{ opacity:0; transform:translateY(8px); }}
+  to   {{ opacity:1; transform:translateY(0); }}
+}}
+@keyframes ttdraw {{ from {{ width:0; }} to {{ width:3.6rem; }} }}
+@keyframes ttpulse {{
+  0%,100% {{ opacity:1; }} 50% {{ opacity:.55; }}
+}}
+@keyframes ttripple {{
+  0% {{ transform:scale(.6); opacity:.55; }}
+  100% {{ transform:scale(2.4); opacity:0; }}
+}}
 .tt-boot {{
-  min-height: 62vh; display:flex; flex-direction:column;
+  min-height: 66vh; display:flex; flex-direction:column;
   align-items:center; justify-content:center; text-align:center;
   font-family:{SANS}; color:{INK};
 }}
+.tt-boot .glyph {{
+  position:relative; width:44px; height:44px; margin-bottom:1rem;
+}}
+.tt-boot .glyph .dot {{
+  position:absolute; inset:0; margin:auto; width:12px; height:12px; border-radius:50%;
+  background:{ACCENT}; animation:ttpulse 1.6s ease-in-out infinite;
+}}
+.tt-boot .glyph .ring {{
+  position:absolute; inset:0; margin:auto; width:16px; height:16px; border-radius:50%;
+  border:2px solid {ACCENT};
+}}
+.tt-boot .glyph .ring.r1 {{ animation:ttripple 1.9s ease-out infinite; }}
+.tt-boot .glyph .ring.r2 {{ animation:ttripple 1.9s ease-out .95s infinite; }}
 .tt-boot .mark {{
-  font-size:2.1rem; font-weight:680; letter-spacing:-.03em; margin-bottom:.2rem;
+  font-size:2.15rem; font-weight:680; letter-spacing:-.03em; margin-bottom:.2rem;
+  animation:ttrise .55s ease both;
 }}
+.tt-boot .mark .dot {{ color:{ACCENT}; }}
 .tt-boot .rule {{
-  width:3.2rem; height:2px; background:{INK}; margin:.55rem 0 .9rem;
+  width:3.6rem; height:2px; background:{ACCENT}; margin:.6rem 0 .95rem;
+  animation:ttdraw .6s .15s ease both;
 }}
-.tt-boot .say {{ color:{DIM}; font-size:1rem; max-width:34rem; line-height:1.65; }}
+.tt-boot .say {{
+  color:{DIM}; font-size:1rem; max-width:34rem; line-height:1.65;
+  animation:ttrise .55s .12s ease both;
+}}
 .tt-boot .beats {{
   display:flex; gap:2.4rem; flex-wrap:wrap; justify-content:center;
   margin:2rem 0 .4rem; max-width:46rem;
 }}
-.tt-boot .beat {{ flex:1 1 11rem; max-width:13rem; text-align:left; }}
+.tt-boot .beat {{ flex:1 1 11rem; max-width:13rem; text-align:left; animation:ttrise .6s ease both; }}
+.tt-boot .beat:nth-child(1) {{ animation-delay:.20s; }}
+.tt-boot .beat:nth-child(2) {{ animation-delay:.34s; }}
+.tt-boot .beat:nth-child(3) {{ animation-delay:.48s; }}
 .tt-boot .beat .n {{
   font-family:{MONO}; font-size:.7rem; color:{ACCENT}; letter-spacing:.1em;
   margin-bottom:.3rem;
@@ -358,22 +396,24 @@ _BOOT_CSS = f"""
 .tt-boot .beat .d {{ font-size:.8rem; color:{DIM}; line-height:1.55; }}
 .tt-boot .step {{
   font-family:{MONO}; font-size:.8rem; color:{ACCENT};
-  margin-top:1.8rem; letter-spacing:.02em;
+  margin-top:1.8rem; letter-spacing:.02em; animation:ttrise .6s .55s ease both;
 }}
 .tt-boot .bar {{
-  width:min(22rem, 70vw); height:2px; background:{LINE};
+  width:min(22rem, 70vw); height:3px; border-radius:2px; background:{LINE};
   margin-top:.7rem; overflow:hidden; position:relative;
 }}
 .tt-boot .bar::after {{
-  content:""; position:absolute; inset:0; width:35%;
-  background:{ACCENT}; animation:ttslide 1.15s ease-in-out infinite;
-}}
-@keyframes ttslide {{
-  0% {{ transform:translateX(-100%); }}
-  100% {{ transform:translateX(320%); }}
+  content:""; position:absolute; inset:0; width:35%; border-radius:2px;
+  background:linear-gradient(90deg,{ACCENT},#3b82d4);
+  animation:ttslide 1.15s ease-in-out infinite;
 }}
 @media (prefers-reduced-motion: reduce) {{
   .tt-boot .bar::after {{ animation:none; width:100%; opacity:.35; }}
+  .tt-boot .glyph .ring {{ animation:none; opacity:.3; }}
+  .tt-boot .glyph .dot {{ animation:none; }}
+  .tt-boot .mark, .tt-boot .rule, .tt-boot .say, .tt-boot .beat, .tt-boot .step {{
+    animation:none;
+  }}
 }}
 </style>
 """
@@ -401,7 +441,9 @@ def loading_screen(step: str = "Assembling the jacket and solving the frame") ->
     )
     return _BOOT_CSS + (
         '<div class="tt-boot">'
-        '<div class="mark">TideTwin</div>'
+        '<div class="glyph"><span class="ring r1"></span>'
+        '<span class="ring r2"></span><span class="dot"></span></div>'
+        '<div class="mark">Tide<span class="dot">·</span>Twin</div>'
         '<div class="rule"></div>'
         '<div class="say">An adversarial test bench for a fatigue digital twin. '
         "Built to falsify the method, not to demonstrate it.</div>"
