@@ -300,8 +300,8 @@ def sidebar() -> AnalysisConfig:
             marine_growth_mm=(0.0, st.slider("Marine growth after 20 y, mm", 0.0, 150.0, 100.0)),
             wave_offset_sd_ms=st.slider("Wave velocity offset, m/s 1sd", 0.0, 0.5, 0.10),
             scour_factor_range=(st.slider("Foundation stiffness retained", 0.01, 1.0, 0.15), 1.0),
-            fbg_drift_sd_ustrain=st.slider("Differential FBG drift, ustrain 1sd", 0.0, 5.0, 0.5),
-            fbg_noise_ustrain=st.slider("FBG noise, ustrain rms", 0.0, 2.0, 0.2),
+            fbg_drift_sd_ustrain=st.slider("Differential FBG drift, ustrain 1sd", 0.0, 5.0, 0.05),
+            fbg_noise_ustrain=st.slider("FBG noise, ustrain rms", 0.0, 2.0, 0.05),
         )
 
     with s.expander("Economic inputs (all ASSUMED)"):
@@ -348,7 +348,12 @@ def sidebar() -> AnalysisConfig:
         seed=int(seed),
         ranges=ranges,
         economics=econ,
-        tide_table=tide_table,
+        # A selected NOAA station takes precedence over any typed table in
+        # constituents(), so the table is only part of the configuration when no
+        # station is chosen. Carrying the ignored placeholder table otherwise put
+        # a phantom difference into the cache key and stopped the precomputed
+        # default from matching a fresh visitor's sidebar.
+        tide_table=(tide_table if tide_station is None else None),
         tide_source=tide_source,
         tide_station=tide_station,
     )
@@ -359,6 +364,32 @@ def _quick(key: tuple) -> Artifacts:
     return run_quick(_cfg_from_key(key))
 
 
+@st.cache_resource(show_spinner=False)
+def _bundle():
+    """The committed precomputed default result, or None if absent/stale.
+
+    Loaded once per process. This is what lets a fresh visitor see the fully
+    populated default view without the container computing anything - the reason
+    the deployed app is no longer pinned on the CPU throttle. Any problem loading
+    it returns None and the app computes on demand instead, so it can only ever
+    make things faster, never wrong.
+    """
+    from tidetwin.precompute import load_bundle
+
+    return load_bundle()
+
+
+def _bundle_matches(key: tuple) -> bool:
+    """Does the current config match the one the bundle was built for?
+
+    Compared on everything but the trailing code-fingerprint element, which
+    differs between the machine that built the bundle and this one but says
+    nothing about the configuration.
+    """
+    b = _bundle()
+    return b is not None and key[:-1] == _cfg_key(b["cfg"])[:-1]
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def _full(key: tuple) -> Artifacts:
     """The full claims analysis, cached on the inputs so it runs once."""
@@ -367,7 +398,14 @@ def _full(key: tuple) -> Artifacts:
 
 @st.cache_data(show_spinner=False, max_entries=2)
 def _sensitivity(key: tuple):
-    """LJF and joint sensitivity sweeps. Returns ([], []) rather than failing."""
+    """LJF and joint sensitivity sweeps. Returns ([], []) rather than failing.
+
+    The 24-joint sweep is the single most expensive thing on the Structure tab,
+    so for the default configuration it is served from the precomputed bundle
+    rather than recomputed on load.
+    """
+    if _bundle_matches(key):
+        return _bundle()["sensitivity"]
     cfg = _cfg_from_key(key)
     try:
         cfg, _notes = normalise(cfg)
@@ -385,6 +423,8 @@ def _sensitivity(key: tuple):
 @st.cache_data(show_spinner=False, max_entries=4)
 def _cycle(key: tuple):
     """One tidal cycle of real frame solves, for the animation."""
+    if _bundle_matches(key):
+        return _bundle()["cycle"]
     cfg = _cfg_from_key(key)
     try:
         from tidetwin.geometry.oc4 import build_jacket, sensor_pair
@@ -503,7 +543,6 @@ _boot = st.empty()
 _first = "booted" not in st.session_state
 if _first:
     _boot.markdown(loading_screen(), unsafe_allow_html=True)
-art_quick = _quick(key)
 st.session_state.booted = True
 
 if "full" not in st.session_state:
@@ -511,26 +550,19 @@ if "full" not in st.session_state:
     st.session_state.full_key = None
     st.session_state.full_cfg = None
 
-# Run the full analysis automatically the first time. Showing nine claims as
-# "not run yet" on arrival makes the ledger look broken, and a reader has no way
-# to tell that from a ledger that genuinely could not be settled. The result is
-# cached on the inputs, so this cost is paid once.
+# On first load, show the precomputed default result instantly - do NOT compute.
+# Auto-running the analysis on every cold load is what pinned the deployed app on
+# the CPU throttle: a minute of solver work per visitor, per rerun, forever. The
+# committed bundle carries that result for the default configuration, so a fresh
+# visitor sees the fully populated app with the container doing no solving at all.
+# If the bundle is missing or stale the app simply opens on its "run the analysis"
+# landing; it never silently burns CPU on load again.
 if _first and st.session_state.full is None:
-    _boot.markdown(
-        loading_screen("Running the claims analysis - Monte Carlo over nine claims"),
-        unsafe_allow_html=True,
-    )
-    try:
-        st.session_state.full = _full(key)
-        st.session_state.full_cfg = cfg
-        st.session_state.full_key = key
-    except Exception as exc:  # noqa: BLE001 - the app must still open
-        st.session_state.full = None
-        st.session_state.full_cfg = None
-        st.warning(
-            f"The automatic analysis did not complete ({type(exc).__name__}: {exc}). "
-            "Press Run full analysis to retry."
-        )
+    b = _bundle()
+    if b is not None and _bundle_matches(key):
+        st.session_state.full = b["full"]
+        st.session_state.full_cfg = b["cfg"]
+        st.session_state.full_key = _cfg_key(b["cfg"])
 _boot.empty()
 
 # A code reload or a redeploy re-defines the dataclasses, which leaves anything
@@ -556,7 +588,11 @@ if st.session_state.full is not None and not isinstance(st.session_state.full, A
 # not the sidebar.
 _have_full = st.session_state.full is not None
 _stale = _have_full and st.session_state.full_key != key
-art: Artifacts = st.session_state.full if _have_full else art_quick
+# The quick fallback is only needed when nothing full is on screen. Computing it
+# eagerly on every load cost a second or two of solver work even when the bundle
+# already had the full result to show - wasted, and on a throttled container not
+# free. So it is computed lazily, here, only if it is actually about to be shown.
+art: Artifacts = st.session_state.full if _have_full else _quick(key)
 #: The configuration the displayed figures were actually computed from.
 shown_cfg: AnalysisConfig = st.session_state.get("full_cfg") if _have_full else cfg
 if shown_cfg is None:
@@ -832,11 +868,19 @@ with TABS[1]:
 
         section("Tidal cycle simulation",
                 "the frame solved at every phase of one M2 cycle - press play")
-        with st.spinner("Solving the frame through a tidal cycle..."):
-            cyc = _cycle(key)
+        # Only solve the cycle when there is a full result for these exact inputs
+        # - the precomputed default, or a run the user asked for. Changing an
+        # input must not silently trigger 36 frame solves on a throttled container.
+        if st.session_state.get("full_key") != key:
+            unavailable_panel("Awaiting a run",
+                              "Press Re-run with the new inputs to solve the tidal cycle "
+                              "for the current configuration.")
+            cyc = None
+        else:
+            with st.spinner("Solving the frame through a tidal cycle..."):
+                cyc = _cycle(key)
         if cyc is None:
-            unavailable_panel("Simulation unavailable",
-                              "The tidal cycle could not be solved for these inputs.")
+            pass
         else:
             j = TABLES.joints
             edges = [(int(m.joint_i), int(m.joint_j), int(m.prop_set))
@@ -973,8 +1017,18 @@ with TABS[1]:
 
         section("How much do the modelling choices matter?",
                 "measured, not asserted - the spread is the honest precision")
-        with st.spinner("Sweeping joints and joint-flexibility models..."):
-            ljf_rows, joint_rows = _sensitivity(key)
+        # The 24-joint sweep is the heaviest thing on this tab. Compute it only
+        # for a configuration that already has a full result (the precomputed
+        # default, or a run the user requested), never as a side effect of a
+        # slider move on a throttled container.
+        if st.session_state.get("full_key") != key:
+            unavailable_panel("Awaiting a run",
+                              "Press Re-run with the new inputs to sweep the joints and "
+                              "joint-flexibility models for the current configuration.")
+            ljf_rows, joint_rows = [], []
+        else:
+            with st.spinner("Sweeping joints and joint-flexibility models..."):
+                ljf_rows, joint_rows = _sensitivity(key)
 
         if ljf_rows:
             cols = st.columns([3, 2])
