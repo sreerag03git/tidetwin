@@ -36,7 +36,14 @@ BUNDLE_PATH = _PKG / "data" / "precomputed" / "default_bundle.pkl"
 
 #: Bumped by hand if the bundle's structure changes in a way the fingerprint
 #: alone would not catch. Part of the stored dict and checked on load.
-_BUNDLE_VERSION = 1
+_BUNDLE_VERSION = 2
+
+#: Modules that render results but never enter the computation the bundle stores.
+#: They are excluded from the fingerprint so that a purely cosmetic edit does not
+#: force a two-minute regeneration. Nothing here is imported by run_full, the
+#: sensitivity sweep or the tidal-cycle simulation - if that ever changes, move
+#: the module out of this set.
+_PRESENTATION_ONLY: frozenset[str] = frozenset({"ui.py", "diagram.py"})
 
 
 def source_fingerprint() -> str:
@@ -52,6 +59,8 @@ def source_fingerprint() -> str:
     h.update(str(_BUNDLE_VERSION).encode())
     try:
         for p in sorted(_PKG.rglob("*.py"), key=lambda q: q.as_posix()):
+            if p.name in _PRESENTATION_ONLY:
+                continue
             h.update(p.relative_to(_PKG).as_posix().encode())
             with open(p, encoding="utf-8") as fh:
                 h.update(fh.read().encode("utf-8"))

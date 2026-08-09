@@ -54,6 +54,7 @@ from tidetwin.report import ReportInputs, to_html, to_markdown, to_text
 from tidetwin.unlock import gate_status
 from tidetwin.ui import (
     cover,
+    running_reporter,
     svg_figure,
     dataframe,
     figure_block,
@@ -165,7 +166,7 @@ def tide_inputs(s) -> tuple[dict | None, str]:
         return table, source
 
 
-def run_control(container, key, *, prominent: bool) -> None:
+def run_control(container, key, *, prominent: bool, overlay=None) -> None:
     """The Run button, and an honest statement of whether it is needed.
 
     Moving a slider deliberately does not recompute - a Monte Carlo over nine
@@ -194,18 +195,32 @@ def run_control(container, key, *, prominent: bool) -> None:
                               icon=":material/check_circle:")
     if container.button(label, type=kind, width="stretch",
                         key=f"run_{'side' if prominent else 'top'}"):
-        bar = container.progress(0.0, "starting")
+        # Render the live pipeline in the main-area overlay when we have one, so
+        # pressing Run shows the machine working across the top of the page rather
+        # than a thin grey bar tucked in the sidebar. Fall back to a plain bar if
+        # no overlay was passed.
+        report = running_reporter(overlay) if overlay is not None else None
+        bar = None if overlay is not None else container.progress(0.0, "starting")
+
+        def _progress(f: float, m: str) -> None:
+            if report is not None:
+                report(f, m)
+            else:
+                bar.progress(min(f, 1.0), m)
+
         try:
+            _progress(0.0, "assembling the frame")
             _cfg = _cfg_from_key(key)
-            st.session_state.full = run_full(
-                _cfg, lambda f, m: bar.progress(min(f, 1.0), m)
-            )
+            st.session_state.full = run_full(_cfg, _progress)
             st.session_state.full_key = key
             # Kept so the stamp and captions can describe the run being shown
             # rather than whatever the sidebar says later.
             st.session_state.full_cfg = _cfg
         finally:
-            bar.empty()
+            if overlay is not None:
+                overlay.empty()
+            else:
+                bar.empty()
         st.rerun()
     if prominent:
         container.caption(
@@ -540,6 +555,9 @@ key = _cfg_key(cfg)
 # surface: a few seconds of real work. Show what is happening instead of a blank
 # page, and clear it the moment the result is in.
 _boot = st.empty()
+# A main-area slot the Run button draws its live pipeline into, so a run shows
+# across the top of the page rather than as a thin bar in the sidebar.
+_run_overlay = st.empty()
 _first = "booted" not in st.session_state
 if _first:
     _boot.markdown(loading_screen(), unsafe_allow_html=True)
@@ -649,12 +667,12 @@ _pending = sum(r.status is Status.NOT_RUN for r in results)
 if _pending:
     top[2].caption(f"{_pending} more awaiting analysis")
 with top[3]:
-    run_control(st.container(), key, prominent=False)
+    run_control(st.container(), key, prominent=False, overlay=_run_overlay)
 
 # The same control at the top of the sidebar, next to the inputs it applies to.
 # The slot was reserved before the widgets were drawn, so it appears above them
 # rather than below sixty of them where nobody would find it.
-run_control(st.session_state["_run_slot"], key, prominent=True)
+run_control(st.session_state["_run_slot"], key, prominent=True, overlay=_run_overlay)
 
 if art.c3 is None:
     st.info(

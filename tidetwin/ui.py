@@ -32,6 +32,7 @@ from .provenance import Provenance, Quantity
 __all__ = [
     "inject_theme",
     "loading_screen",
+    "running_reporter",
     "masthead",
     "cover",
     "svg_figure",
@@ -61,6 +62,7 @@ DIM = "#5b646d"
 LINE = "#e1e5e9"
 PANEL = "#f7f8fa"
 ACCENT = "#1a5fb4"
+GOOD = "#1a7f43"  # the PASS green, reused by the running panel's completed stages
 
 _CSS = f"""
 <style>
@@ -256,6 +258,45 @@ a {{ color:var(--tt-accent); }}
 [data-testid="stDataFrame"] {{ font-variant-numeric:tabular-nums; }}
 
 .stButton button, .stDownloadButton button {{ font-family:{SANS}; font-weight:600; }}
+
+/* ---------- polish ---------- */
+/* Cards lift slightly on hover, so the strip reads as a set of objects rather
+   than a flat wall. Kept subtle; motion is disabled for reduced-motion users. */
+.tt-strip .c, .tt-hero {{ transition:box-shadow .15s ease, transform .15s ease; }}
+.tt-strip .c:hover {{
+  box-shadow:0 3px 10px rgba(20,24,28,.09); transform:translateY(-1px);
+}}
+.tt-cover .tt-creds span {{ transition:border-color .15s ease, color .15s ease; }}
+.tt-cover .tt-creds span:hover {{ border-color:var(--tt-accent); color:var(--tt-accent); }}
+
+/* Active tab carries the accent as an underline, not just a colour shift. */
+.stTabs [data-baseweb="tab"] {{ border-bottom:2px solid transparent; margin-bottom:-1px; }}
+.stTabs [aria-selected="true"] {{ border-bottom-color:var(--tt-accent); font-weight:670; }}
+.stTabs [data-baseweb="tab"]:hover {{ color:var(--tt-ink); }}
+
+/* Primary button in the brand accent; a clear affordance for Run. */
+.stButton button[kind="primary"], .stButton button[data-testid="baseButton-primary"] {{
+  background:var(--tt-accent); border-color:var(--tt-accent); color:#fff;
+}}
+.stButton button[kind="primary"]:hover {{ background:#17539f; border-color:#17539f; }}
+.stButton button {{ transition:background .12s ease, border-color .12s ease; }}
+
+/* Section headings get a short accent tick before the title. */
+.tt-section .t::before {{
+  content:""; display:inline-block; width:.5rem; height:.5rem; margin-right:.5rem;
+  background:var(--tt-accent); border-radius:1px; vertical-align:.08em;
+}}
+
+/* Metric row reads as cards, lightly bounded. */
+[data-testid="stMetric"] {{
+  background:#fff; border:1px solid var(--tt-line); border-radius:5px;
+  padding:.55rem .8rem;
+}}
+
+@media (prefers-reduced-motion: reduce) {{
+  .tt-strip .c, .tt-hero, .stButton button {{ transition:none; }}
+  .tt-strip .c:hover {{ transform:none; }}
+}}
 </style>
 """
 
@@ -369,6 +410,85 @@ def loading_screen(step: str = "Assembling the jacket and solving the frame") ->
         '<div class="bar"></div>'
         "</div>"
     )
+
+
+_RUN_CSS = f"""
+<style>
+.tt-run {{
+  border:1px solid var(--tt-line); border-top:3px solid var(--tt-accent);
+  background:var(--tt-panel); border-radius:6px; padding:1.5rem 1.6rem 1.7rem;
+  margin:.2rem 0 1.2rem; font-family:{SANS};
+}}
+.tt-run .mark {{ font-size:1.15rem; font-weight:660; letter-spacing:-.01em; }}
+.tt-run .sub {{ color:{DIM}; font-size:.82rem; margin-top:.2rem; }}
+.tt-run .track {{
+  height:8px; border-radius:5px; background:{LINE}; overflow:hidden; margin:1.1rem 0 .6rem;
+}}
+.tt-run .fill {{
+  height:100%; border-radius:5px; background:linear-gradient(90deg,{ACCENT},#3b82d4);
+  transition:width .35s ease;
+}}
+.tt-run .msg {{
+  font-family:{MONO}; font-size:.82rem; color:var(--tt-ink);
+  font-variant-numeric:tabular-nums; display:flex; justify-content:space-between; gap:1rem;
+}}
+.tt-run .msg .pct {{ color:{ACCENT}; font-weight:600; }}
+.tt-run .stages {{
+  display:flex; flex-wrap:wrap; gap:.4rem; margin-top:1rem;
+}}
+.tt-run .stage {{
+  font-family:{MONO}; font-size:.66rem; letter-spacing:.02em; padding:.22rem .5rem;
+  border:1px solid var(--tt-line); border-radius:3px; color:{DIM}; background:#fff;
+}}
+.tt-run .stage.done {{ color:{GOOD}; border-color:{GOOD}; }}
+.tt-run .stage.active {{ color:{ACCENT}; border-color:{ACCENT}; font-weight:600; }}
+</style>
+"""
+
+#: The pipeline stages, in the order run_full reports them, with the fraction at
+#: which each becomes active. Used to light up the running panel.
+_RUN_STAGES: tuple[tuple[float, str], ...] = (
+    (0.00, "Frame"),
+    (0.05, "C1·C2"),
+    (0.30, "C3"),
+    (0.60, "C4"),
+    (0.75, "C6"),
+    (0.88, "C8·C9"),
+    (1.00, "Ledger"),
+)
+
+
+def running_reporter(placeholder):
+    """A progress callback that renders a full-width 'running' panel.
+
+    run_full reports ``(fraction, message)`` at each claim. This turns that into
+    a live panel with a filling bar, the current step, and the pipeline stages
+    lighting up as they complete - so pressing Run shows the machine working
+    rather than a bare grey progress line.
+    """
+
+    def report(frac: float, msg: str) -> None:
+        f = float(min(max(frac, 0.0), 1.0))
+        pct = int(round(f * 100))
+        chips = []
+        for i, (start, name) in enumerate(_RUN_STAGES):
+            nxt = _RUN_STAGES[i + 1][0] if i + 1 < len(_RUN_STAGES) else 1.01
+            cls = "done" if f >= nxt else ("active" if f >= start else "")
+            chips.append(f'<span class="stage {cls}">{name}</span>')
+        placeholder.markdown(
+            _RUN_CSS
+            + '<div class="tt-run">'
+            '<div class="mark">Running the analysis</div>'
+            '<div class="sub">Nine claims &middot; a Monte Carlo over eight nuisance '
+            "channels &middot; a few hundred frame solves</div>"
+            f'<div class="track"><div class="fill" style="width:{pct}%"></div></div>'
+            f'<div class="msg"><span>{msg}</span><span class="pct">{pct}%</span></div>'
+            f'<div class="stages">{"".join(chips)}</div>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    return report
 
 
 def hero_result(
