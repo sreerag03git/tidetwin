@@ -520,6 +520,16 @@ def _gauge_robustness_sweep() -> dict:
     }
 
 
+@st.cache_data(show_spinner=False, max_entries=256)
+def _gauge_point(sigma_angle_deg: float, sigma_gain_pct: float):
+    """The rosette robustness at one instrumentation spec. Cached per spec so the
+    interactive explorer stays cheap however much the sliders are dragged."""
+    from tidetwin.rosette import gauge_robustness
+
+    return gauge_robustness(sigma_angle_deg=float(sigma_angle_deg),
+                            sigma_gain=float(sigma_gain_pct) / 100.0, n=5000)
+
+
 @st.cache_data(show_spinner=False, max_entries=8)
 def jacket_3d(joint_id: int, title: str = "OC4 jacket, target joint marked") -> go.Figure:
     """The 3D jacket blueprint, braces highlighted and the target joint marked.
@@ -1635,6 +1645,51 @@ with TABS[4]:
                 "leaks is only a tenth of the signal. Specify matched interrogator channels "
                 "before tight survey tolerances."
             )
+
+            with st.expander("Test your own instrumentation spec"):
+                st.caption(
+                    "Enter the placement tolerance and gain matching your interrogator and "
+                    "survey can actually deliver. The verdict is recomputed live - it is a "
+                    "cheap phasor Monte Carlo - so you can see the instrumentation budget "
+                    "the fix needs at this site before committing to a deployment."
+                )
+                ecols = st.columns(2)
+                with ecols[0]:
+                    my_angle = st.slider("Gauge placement 1sd, degrees", 0.0, 15.0, 3.0, 0.5,
+                                         key="gauge_angle")
+                with ecols[1]:
+                    my_gain = st.slider("Gauge gain matching 1sd, %", 0.0, 5.0, 1.0, 0.1,
+                                        key="gauge_gain")
+                mine = _gauge_point(my_angle, my_gain)
+                vcols = st.columns(3)
+                with vcols[0]:
+                    quantity(derived(mine.ratio_dispersion * 100, "%",
+                                     "gauge-induced dispersion", [],
+                                     "your spec, propagated to the strain ratio"))
+                with vcols[1]:
+                    quantity(derived(mine.combined_cv * 100, "%",
+                                     "combined with the environment", [],
+                                     "gauge and environmental dispersion in quadrature"))
+                with vcols[2]:
+                    quantity(derived(mine.combined_over_signature, "x",
+                                     "vs signature (limit 0.33)", [],
+                                     "combined dispersion over the claimed damage signature",
+                                     note="PASS at this spec" if mine.passes
+                                     else "FAIL at this spec"))
+                if mine.passes:
+                    st.success(
+                        f"At {my_angle:g} deg placement and {my_gain:g} % gain matching the "
+                        "rosette still resolves the claimed damage signature - the fix is "
+                        "deliverable with this instrumentation.",
+                        icon=":material/check_circle:",
+                    )
+                else:
+                    st.warning(
+                        f"At {my_angle:g} deg placement and {my_gain:g} % gain matching the "
+                        "combined dispersion exceeds a third of the signature - tighten the "
+                        "gain matching first, it is the dominant term.",
+                        icon=":material/warning:",
+                    )
 
             if getattr(n, "decomposition", None) is not None:
                 d = n.decomposition
