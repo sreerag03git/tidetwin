@@ -643,6 +643,21 @@ if _first and st.session_state.full is None:
         # simulation, so the Structure tab shows them without solving. This flag
         # lets that tab reach for them instead of blanking to "awaiting a run".
         st.session_state.full_from_bundle = True
+    else:
+        # The bundle could not be loaded on this host at all (the Diagnostics
+        # panel shows why). Rather than leave Detection, Assimilation and
+        # Economics blank, compute the default result once. _full is
+        # @st.cache_data, so this runs a single time per container for the
+        # default inputs - not on every rerun - and does not bring back the
+        # per-rerun solving the bundle exists to avoid. If even this fails the
+        # app still opens; the tabs just show their "press Run" panels.
+        try:
+            st.session_state.full = _full(key)
+            st.session_state.full_key = key
+            st.session_state.full_cfg = _cfg_from_key(key)
+            st.session_state.full_from_bundle = False
+        except Exception:  # noqa: BLE001 - never crash the cold start over this
+            pass
 # The precomputed result loads in a blink, so hold the branded splash on screen
 # long enough to be seen and for its animation to play - a deliberate ~1.7 s
 # intro on the first visit only, not a recomputed wait. It is a rendered page
@@ -698,13 +713,29 @@ with st.sidebar.expander("Diagnostics", expanded=False):
     import platform as _platform
     import sys as _sys
 
+    from tidetwin.precompute import last_load_error
+
     _b = _bundle()
     st.caption(f"python {_platform.python_version()} · {_sys.platform} · build {deployed_revision()}")
     if _b is None:
-        st.caption(":red[bundle: **not loaded** — absent, wrong fingerprint, or unpicklable]")
+        st.caption(":red[bundle: **not loaded**]")
+        st.caption(f"reason: `{last_load_error()}`")
     else:
         st.caption("bundle: loaded")
-        st.caption(f"matches default inputs: {'yes' if _bundle_matches(key) else '**no**'}")
+        _match = _bundle_matches(key)
+        st.caption(f"matches default inputs: {'yes' if _match else '**no**'}")
+        if not _match:
+            # Name the first field that differs, so a mismatch is actionable
+            # rather than mysterious. Same order as _cfg_key.
+            _names = ["latitude", "longitude", "joint_id", "sensor_offset_m",
+                      "sensor_theta_deg", "ljf_model", "roughness_m", "marine_growth_mm",
+                      "record_days", "crack_a_over_T", "crack_2c_m", "n_mc_samples",
+                      "n_theta", "seed", "tide_table", "tide_station", "measurement_mode"]
+            _sk, _bk = key[:-1], _cfg_key(_b["cfg"])[:-1]
+            _diffs = [f"{n}: sidebar={s!r} vs bundle={bb!r}"
+                      for n, s, bb in zip(_names, _sk, _bk) if s != bb]
+            for d in _diffs[:4]:
+                st.caption(f"• {d}")
         st.caption(f"seeded object is Artifacts: {isinstance(st.session_state.get('full'), Artifacts)}")
     _src = (
         "full — from the precomputed bundle"

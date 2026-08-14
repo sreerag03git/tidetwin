@@ -121,21 +121,44 @@ def save_bundle(cfg: Any = None) -> tuple[Path, int]:
     return BUNDLE_PATH, BUNDLE_PATH.stat().st_size
 
 
+#: Why the last load_bundle() returned None, for the app's Diagnostics panel.
+#: The deployed app hides tracebacks and load_bundle degrades silently, so
+#: without this a bundle that fails only on the deploy host is invisible.
+_LAST_LOAD_ERROR: str | None = None
+
+
+def last_load_error() -> str | None:
+    """A human-readable reason the most recent load_bundle() returned None."""
+    return _LAST_LOAD_ERROR
+
+
 def load_bundle() -> dict[str, Any] | None:
     """Load the committed bundle if it is present and current, else ``None``.
 
     Never raises: a missing file, a fingerprint mismatch, or an unpicklable
     object all return ``None`` so the caller degrades to computing on demand.
+    The reason is recorded in ``last_load_error()`` for the Diagnostics panel.
     """
+    global _LAST_LOAD_ERROR
     try:
         if not BUNDLE_PATH.is_file():
+            _LAST_LOAD_ERROR = f"file not found at {BUNDLE_PATH}"
             return None
         with open(BUNDLE_PATH, "rb") as fh:
             bundle = pickle.load(fh)
         if bundle.get("version") != _BUNDLE_VERSION:
+            _LAST_LOAD_ERROR = (
+                f"version {bundle.get('version')!r} != expected {_BUNDLE_VERSION!r}"
+            )
             return None
-        if bundle.get("fingerprint") != source_fingerprint():
+        want = source_fingerprint()
+        if bundle.get("fingerprint") != want:
+            _LAST_LOAD_ERROR = (
+                f"fingerprint {bundle.get('fingerprint')!r} != source {want!r}"
+            )
             return None
+        _LAST_LOAD_ERROR = None
         return bundle
-    except Exception:  # noqa: BLE001 - a bad bundle must degrade, never crash the app
+    except Exception as exc:  # noqa: BLE001 - a bad bundle must degrade, never crash the app
+        _LAST_LOAD_ERROR = f"{type(exc).__name__}: {exc}"
         return None
