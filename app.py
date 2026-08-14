@@ -623,7 +623,19 @@ if "full" not in st.session_state:
 # landing; it never silently burns CPU on load again.
 if _first and st.session_state.full is None:
     b = _bundle()
-    if b is not None and _bundle_matches(key):
+    if b is not None:
+        # First load: the sidebar is still at its defaults, which is exactly the
+        # configuration the bundle was built for, so its full result is the right
+        # thing to show - every Monte-Carlo tab populated with no solving.
+        #
+        # This is deliberately NOT gated on an exact cache-key match any more. The
+        # key round-trips floats and the NOAA station list through widgets, and a
+        # difference too small to matter on the deploy host was rejecting a bundle
+        # that is, in fact, the default - which left Detection, Assimilation and
+        # Economics blank on Streamlit Cloud while they filled in locally. The
+        # bundle carries its own cfg, and full_key is set from it, so if the user's
+        # inputs genuinely diverge the staleness banner below flags it and offers a
+        # re-run. Showing the precomputed default is always correct on first load.
         st.session_state.full = b["full"]
         st.session_state.full_cfg = b["cfg"]
         st.session_state.full_key = _cfg_key(b["cfg"])
@@ -676,6 +688,34 @@ if shown_cfg is None:
     shown_cfg = cfg
 results = evaluate_all(art)
 by_id = {r.claim_id: r for r in results}
+
+# A read-out of the cold-start decision, so a fresh visitor who sees empty
+# Monte-Carlo tabs (or I, without access to the deploy) can tell in one glance
+# whether the precomputed bundle loaded, whether it was judged to match the
+# default inputs, and which result is actually on screen. Collapsed by default;
+# it costs nothing and it turns "it's blank on Cloud" into a specific answer.
+with st.sidebar.expander("Diagnostics", expanded=False):
+    import platform as _platform
+    import sys as _sys
+
+    _b = _bundle()
+    st.caption(f"python {_platform.python_version()} · {_sys.platform} · build {deployed_revision()}")
+    if _b is None:
+        st.caption(":red[bundle: **not loaded** — absent, wrong fingerprint, or unpicklable]")
+    else:
+        st.caption("bundle: loaded")
+        st.caption(f"matches default inputs: {'yes' if _bundle_matches(key) else '**no**'}")
+        st.caption(f"seeded object is Artifacts: {isinstance(st.session_state.get('full'), Artifacts)}")
+    _src = (
+        "full — from the precomputed bundle"
+        if st.session_state.get("full_from_bundle")
+        else "full — from a run you started"
+        if st.session_state.get("full") is not None
+        else ":red[quick only — Monte-Carlo tabs will be blank]"
+    )
+    st.caption(f"showing: {_src}")
+    st.caption(f"Monte-Carlo claims present: c2={art.c2 is not None} c3={art.c3 is not None} "
+               f"c6={art.c6 is not None} c8={art.c8 is not None}")
 
 if _stale:
     st.warning(
