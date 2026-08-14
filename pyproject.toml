@@ -1,16 +1,16 @@
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "tidetwin"
-version = "0.1.0"
-description = "Adversarial test bench for the tidal-calibration fatigue digital twin claims"
-requires-python = ">=3.12"
-license = { text = "MIT" }
-
-[tool.setuptools.packages.find]
-include = ["tidetwin*"]
+# This file intentionally declares NO package build system and NO [project]
+# table. It used to, and that was a deployment hazard: nothing in this repo is
+# ever `pip install .`-ed - CI and Streamlit Cloud both run the app and the tests
+# from the repository root with the source directory on the path, never as an
+# installed package - but a [project] table with an empty dependency list tells a
+# project-aware installer (uv, which Streamlit Community Cloud now uses) that it
+# may install "tidetwin" with no dependencies at all. That would leave the
+# container with the app but without numpy, scipy, pandas or streamlit, i.e. an
+# ImportError on the very first import. requirements.txt is the single, explicit
+# source of runtime dependencies, and with no [project] here nothing can override
+# it. Runtime Python is pinned in runtime.txt (python-3.12).
+#
+# Only the test-runner configuration lives here, which pytest reads directly.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

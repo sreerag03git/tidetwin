@@ -114,15 +114,10 @@ def _runtime_python() -> tuple[int, int]:
 
 
 def test_runtime_python_is_declared_consistently():
-    """runtime.txt, pyproject and CI must agree, or the build resolves differently
-    from anything that was tested."""
+    """runtime.txt and CI must agree on the Python version, or the build resolves
+    differently from anything that was tested."""
     py = _runtime_python()
     declared = f"{py[0]}.{py[1]}"
-
-    pyproject = (ROOT / "pyproject.toml").read_text("utf-8")
-    assert f'requires-python = ">={declared}"' in pyproject, (
-        f"pyproject.toml does not require >={declared}"
-    )
 
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8")
     for line in ci.splitlines():
@@ -130,6 +125,23 @@ def test_runtime_python_is_declared_consistently():
             assert declared in line, (
                 f"CI pins {line.strip()} but runtime.txt says {declared}"
             )
+
+
+def test_pyproject_declares_no_installable_project():
+    """pyproject.toml must not carry a [project] or [build-system] table.
+
+    Streamlit Community Cloud installs with uv, which treats any pyproject.toml
+    with those tables as a project to install. Since this repo declares no
+    [project.dependencies], installing it that way would bring the app up with
+    none of numpy/scipy/pandas/streamlit - an ImportError on the first import,
+    the exact deployment failure this guards against. requirements.txt must be
+    the only thing that governs runtime dependencies, so nothing here may look
+    like an installable package.
+    """
+    pyproject = (ROOT / "pyproject.toml").read_text("utf-8")
+    lines = [ln.strip() for ln in pyproject.splitlines()]
+    assert "[project]" not in lines, "remove the [project] table; see this test's docstring"
+    assert "[build-system]" not in lines, "remove the [build-system] table; see the docstring"
 
 
 def test_every_pin_supports_the_declared_python():
