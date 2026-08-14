@@ -59,6 +59,9 @@ __all__ = [
     "DAMAGE_RESPONSE_BY_OBSERVABLE",
     "BENDING_RATIO_NOISE",
     "damage_snr",
+    "GaugeRobustness",
+    "gauge_robustness",
+    "BENDING_AXIAL_RATIO_J5",
 ]
 
 #: Four equally spaced positions. Diametrically opposed pairs are what make the
@@ -203,6 +206,127 @@ def axial_drag_ratio(
     if not np.isfinite(up) or up <= 0:
         return float("nan")
     return float(drag_component(times_s, axial_series(lower_by_angle), elevation) / up)
+
+
+# -------------------------------------------------- gauge-imperfection robustness
+# The rosette fix earns its direction-invariance from the exact cancellation of
+# the bending terms when four gauges sit at exactly 0/90/180/270 degrees with
+# exactly matched gains. A real deployment delivers neither: gauges are placed to
+# a tolerance of a few degrees and their gains are matched to about a percent. So
+# the honest question about our own proposed fix is whether it survives that.
+#
+# It is answered here without any new solving, on the M2 phasor field itself. At
+# a section the M2 strain phasor around the circumference is
+#     E(phi) = A + Bx cos(phi) + By sin(phi),
+# with A the axial phasor and (Bx, By) the bending phasors. The rosette recovers
+# the axial amplitude as |mean of the four gauges|; with perfect gauges the
+# bending terms average to zero and the recovery is exactly |A|. A placement
+# error delta_k and a gain error g_k on gauge k make the measured value
+# g_k * E(phi_k + delta_k), and the average no longer lands on |A|.
+
+#: Bending-to-axial M2 amplitude ratio measured at J5 - the field the rosette
+#: actually sees. Bending is about a tenth of axial there (0.02 vs 0.15-0.32
+#: microstrain), which is why axial is the usable channel; it also bounds how
+#: much a placement error can leak, since only the bending it mixes in can move
+#: the axial estimate.
+BENDING_AXIAL_RATIO_J5: float = 0.10
+
+
+@dataclass(frozen=True)
+class GaugeRobustness:
+    """How gauge placement and gain errors move the rosette's strain ratio."""
+
+    sigma_angle_deg: float
+    sigma_gain: float
+    bending_axial_ratio: float
+    #: Standard deviation of the fractional error in the recovered strain ratio,
+    #: from gauge imperfection alone, as a fraction of the ratio.
+    ratio_dispersion: float
+    #: The environmental nuisance dispersion the rosette already carries.
+    environmental_cv: float
+    #: The two combined in quadrature - they are independent.
+    combined_cv: float
+    damage_signature: float
+    threshold_fraction: float
+    n: int
+
+    @property
+    def combined_over_signature(self) -> float:
+        return self.combined_cv / self.damage_signature
+
+    @property
+    def passes(self) -> bool:
+        """Does the fix still clear the C3 detectability bar with real gauges?"""
+        return self.combined_over_signature <= self.threshold_fraction
+
+
+def _recovered_axial_amp(bx: complex, by: complex, angles_rad: np.ndarray,
+                         gains: np.ndarray) -> float:
+    """|mean of four imperfect gauges| for a unit-axial field, phasor domain."""
+    e = 1.0 + bx * np.cos(angles_rad) + by * np.sin(angles_rad)
+    return float(abs(np.mean(gains * e)))
+
+
+def gauge_robustness(
+    sigma_angle_deg: float = 3.0,
+    sigma_gain: float = 0.01,
+    bending_axial_ratio: float = BENDING_AXIAL_RATIO_J5,
+    environmental_cv: float = 0.0122,
+    damage_signature: float = 0.111,
+    threshold_fraction: float = 1.0 / 3.0,
+    n: int = 6000,
+    seed: int = 20260730,
+) -> GaugeRobustness:
+    """Propagate realistic gauge placement and gain errors to the strain ratio.
+
+    ``sigma_angle_deg`` is the 1-sigma circumferential placement error per gauge,
+    ``sigma_gain`` the 1-sigma fractional gain mismatch. Each of the ratio's two
+    sections carries four gauges with independent errors, so the ratio's error is
+    the difference of the two sections' axial-recovery errors. The bending
+    orientation and the M2 phase are themselves nuisance parameters and are
+    randomised, so the result is not tuned to one convenient field.
+
+    The default ``environmental_cv`` is the rosette's own nuisance dispersion
+    (1.22 percent of the ratio) from ``scripts/rosette_experiment.py``; the two
+    are independent and combine in quadrature. ``passes`` is whether the combined
+    dispersion still clears one third of the damage signature.
+    """
+    rng = np.random.default_rng(seed)
+    nominal = np.radians([0.0, 90.0, 180.0, 270.0])
+    sa = np.radians(sigma_angle_deg)
+
+    def section_error() -> np.ndarray:
+        # A field with the given bending fraction, random spatial orientation and
+        # temporal phase, recovered through four imperfect gauges. Returns the
+        # fractional error in the recovered axial amplitude (perfect = 1).
+        psi = rng.uniform(0.0, 2.0 * np.pi, n)
+        phase = rng.uniform(0.0, 2.0 * np.pi, n)
+        b = bending_axial_ratio * np.exp(1j * phase)
+        bx, by = b * np.cos(psi), b * np.sin(psi)
+        out = np.empty(n)
+        for i in range(n):
+            ang = nominal + rng.normal(0.0, sa, 4)
+            gains = rng.normal(1.0, sigma_gain, 4)
+            out[i] = _recovered_axial_amp(bx[i], by[i], ang, gains) - 1.0
+        return out
+
+    eu = section_error()
+    el = section_error()
+    # ratio = lower/upper; fractional error = (1+el)/(1+eu) - 1.
+    ratio_err = (1.0 + el) / (1.0 + eu) - 1.0
+    disp = float(np.std(ratio_err, ddof=1))
+    combined = float(np.hypot(disp, environmental_cv))
+    return GaugeRobustness(
+        sigma_angle_deg=sigma_angle_deg,
+        sigma_gain=sigma_gain,
+        bending_axial_ratio=bending_axial_ratio,
+        ratio_dispersion=disp,
+        environmental_cv=environmental_cv,
+        combined_cv=combined,
+        damage_signature=damage_signature,
+        threshold_fraction=threshold_fraction,
+        n=n,
+    )
 
 
 # ------------------------------------------------------- damage sensitivity

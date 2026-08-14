@@ -218,3 +218,60 @@ def test_the_snr_helper_is_a_plain_ratio_and_handles_zero_noise():
     assert damage_snr(0.02, 0.01) == pytest.approx(2.0)
     assert damage_snr(-0.02, 0.01) == pytest.approx(2.0)
     assert np.isinf(damage_snr(0.02, 0.0))
+
+
+# ---------------------------------------------------------------------------
+# Does the proposed fix survive real gauges? Placement and gain imperfection.
+
+
+def test_perfect_gauges_recover_the_axial_exactly():
+    """Zero placement and gain error must give zero ratio dispersion - the
+    rosette formula is exact when the four gauges are ideal."""
+    from tidetwin.rosette import gauge_robustness
+
+    r = gauge_robustness(sigma_angle_deg=0.0, sigma_gain=0.0, n=2000)
+    assert r.ratio_dispersion == pytest.approx(0.0, abs=1e-12)
+
+
+def test_gain_mismatch_dominates_placement_error():
+    """The instrumentation finding: matching gauge gains matters more than
+    placing them precisely, because axial averaging is well-conditioned and the
+    bending a placement error leaks is only a tenth of the signal."""
+    from tidetwin.rosette import gauge_robustness
+
+    placement = gauge_robustness(sigma_angle_deg=3.0, sigma_gain=0.0, n=4000)
+    gain = gauge_robustness(sigma_angle_deg=0.0, sigma_gain=0.01, n=4000)
+    assert gain.ratio_dispersion > 2.5 * placement.ratio_dispersion
+
+
+def test_placement_leakage_scales_with_the_bending_fraction():
+    """A placement error can only leak the bending that exists. With no bending
+    in the field, misplacing the gauges does not move the axial estimate."""
+    from tidetwin.rosette import gauge_robustness
+
+    none = gauge_robustness(sigma_angle_deg=4.0, sigma_gain=0.0,
+                            bending_axial_ratio=0.0, n=3000)
+    some = gauge_robustness(sigma_angle_deg=4.0, sigma_gain=0.0,
+                            bending_axial_ratio=0.3, n=3000)
+    assert none.ratio_dispersion == pytest.approx(0.0, abs=1e-9)
+    assert some.ratio_dispersion > none.ratio_dispersion
+
+
+def test_dispersion_grows_with_the_error_size():
+    from tidetwin.rosette import gauge_robustness
+
+    small = gauge_robustness(sigma_angle_deg=2.0, sigma_gain=0.005, n=3000)
+    big = gauge_robustness(sigma_angle_deg=5.0, sigma_gain=0.02, n=3000)
+    assert big.ratio_dispersion > small.ratio_dispersion
+
+
+def test_the_fix_still_passes_c3_at_realistic_tolerances():
+    """The headline: the rosette clears the detectability bar with gauges a real
+    deployment can deliver - combined dispersion under a third of the signature."""
+    from tidetwin.rosette import gauge_robustness
+
+    r = gauge_robustness(sigma_angle_deg=3.0, sigma_gain=0.01, n=5000)
+    assert r.passes
+    assert r.combined_over_signature < 0.2
+    # And it is the environmental floor, not the gauges, that dominates the total.
+    assert r.ratio_dispersion < r.environmental_cv * 1.5
