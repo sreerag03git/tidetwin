@@ -25,6 +25,7 @@ import plotly.graph_objects as go  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from tidetwin.analysis import AnalysisConfig, normalise, run_full, run_quick
+from tidetwin.buildinfo import deployed_revision
 from tidetwin.diagram import method_chain_svg
 from tidetwin.robustness import (
     FBG_RESOLUTION_USTRAIN,
@@ -236,6 +237,10 @@ def sidebar() -> AnalysisConfig:
     s = st.sidebar
     s.markdown("### TideTwin")
     s.caption("Every red chip is an assumption. Results inherit them.")
+    # The commit this process is actually serving. On Streamlit Cloud a stale
+    # cached checkout shows an old SHA here even after a reboot - compare it to
+    # GitHub's main to tell a fresh deploy from a stale one at a glance.
+    s.caption(f"build `{deployed_revision()}`")
     #: Filled in after the config is built, since the staleness check needs its key.
     st.session_state["_run_slot"] = s.container()
     s.divider()

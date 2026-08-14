@@ -43,7 +43,7 @@ _BUNDLE_VERSION = 2
 #: force a two-minute regeneration. Nothing here is imported by run_full, the
 #: sensitivity sweep or the tidal-cycle simulation - if that ever changes, move
 #: the module out of this set.
-_PRESENTATION_ONLY: frozenset[str] = frozenset({"ui.py", "diagram.py"})
+_PRESENTATION_ONLY: frozenset[str] = frozenset({"ui.py", "diagram.py", "buildinfo.py"})
 
 
 def source_fingerprint() -> str:

@@ -216,6 +216,25 @@ def test_every_name_app_imports_from_ui_actually_exists():
     assert not missing, f"app.py imports names tidetwin.ui does not export: {missing}"
 
 
+def test_deployed_revision_is_a_short_sha_or_unknown():
+    """The build badge must read a plausible revision here (a git checkout) and
+    must degrade to 'unknown' - never raise - where there is no git metadata,
+    because it is called at app start-up and a fault would become the very
+    import failure it exists to diagnose.
+    """
+    import string
+
+    from tidetwin.buildinfo import deployed_revision
+
+    here = deployed_revision()
+    assert here == "unknown" or (
+        len(here) == 7 and all(c in string.hexdigits.lower() for c in here)
+    ), f"unexpected revision string: {here!r}"
+
+    # A directory with no .git must be handled, not crash.
+    assert deployed_revision(ROOT.parent.parent / "definitely-not-a-repo-xyz") == "unknown"
+
+
 def test_the_cold_start_path_does_not_import_scipy():
     """scipy is heavy - tens of MB and a slow import - and the deployed app's
     cold start shows the precomputed result without ever solving, so it should
