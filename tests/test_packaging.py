@@ -235,6 +235,17 @@ def test_deployed_revision_is_a_short_sha_or_unknown():
     assert deployed_revision(ROOT.parent.parent / "definitely-not-a-repo-xyz") == "unknown"
 
 
+def test_ui_embeds_figures_with_st_iframe_not_deprecated_components_html():
+    """Streamlit removes st.components.v1.html after 2026-06-01. svg_figure embeds
+    its SVGs with st.iframe instead; guard against a regression that reintroduces
+    the deprecated call and would break the app on a future streamlit bump.
+    """
+    ui_src = (ROOT / "tidetwin" / "ui.py").read_text("utf-8")
+    assert "components.html(" not in ui_src, "use st.iframe, not the deprecated components.html()"
+    assert "import streamlit.components" not in ui_src, "the components.v1 import is no longer needed"
+    assert "st.iframe(" in ui_src, "svg_figure should embed via st.iframe"
+
+
 def test_the_cold_start_path_does_not_import_scipy():
     """scipy is heavy - tens of MB and a slow import - and the deployed app's
     cold start shows the precomputed result without ever solving, so it should
