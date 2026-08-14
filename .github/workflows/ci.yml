@@ -54,6 +54,56 @@ jobs:
       - name: Check the app imports
         run: python -c "import ast,sys; ast.parse(open('app.py').read()); print('app.py parses')"
 
+  deploy-smoke:
+    # Streamlit Cloud installs requirements.txt into a fresh container and runs
+    # `streamlit run app.py`. The test job never does that - it runs pytest - so a
+    # change that imports cleanly in tests but breaks the actual app boot (a
+    # missing runtime dep, a module-level error, the "ImportError at the first
+    # import" the deployed app kept showing) would pass CI and only fail on
+    # deploy. This job reproduces the deploy: a clean environment with ONLY
+    # requirements.txt, then boots the app headless and fails on any startup
+    # error. It is the closest CI can get to the real Streamlit Cloud start.
+    name: App boots like the deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install exactly what the deploy installs
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Boot the app headless and require it to serve cleanly
+        run: |
+          set -euo pipefail
+          streamlit run app.py \
+            --server.headless true --server.port 8531 --server.address 127.0.0.1 \
+            > boot.log 2>&1 &
+          APP_PID=$!
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:8531/_stcore/health; then
+              echo "health OK after ${i}0s"; break
+            fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "::error::streamlit process died during boot"; cat boot.log; exit 1
+            fi
+            sleep 10
+          done
+          curl -sf -o /dev/null http://127.0.0.1:8531/_stcore/health \
+            || { echo "::error::app never became healthy"; cat boot.log; exit 1; }
+          # Let the first script run (bundle load, tab render) complete, then fail
+          # on any error the app surfaced to its log.
+          sleep 20
+          if grep -qiE "Traceback|ImportError|ModuleNotFoundError|has encountered an error" boot.log; then
+            echo "::error::the app logged a startup error"; cat boot.log; kill "$APP_PID"; exit 1
+          fi
+          echo "app booted and served cleanly"
+          cat boot.log
+          kill "$APP_PID" 2>/dev/null || true
+
   ledger:
     name: Regenerate the claims ledger
     runs-on: ubuntu-latest
