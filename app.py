@@ -214,6 +214,7 @@ def run_control(container, key, *, prominent: bool, overlay=None) -> None:
             _cfg = _cfg_from_key(key)
             st.session_state.full = run_full(_cfg, _progress)
             st.session_state.full_key = key
+            st.session_state.full_from_bundle = False
             # Kept so the stamp and captions can describe the run being shown
             # rather than whatever the sidebar says later.
             st.session_state.full_cfg = _cfg
@@ -570,6 +571,7 @@ if "full" not in st.session_state:
     st.session_state.full = None
     st.session_state.full_key = None
     st.session_state.full_cfg = None
+    st.session_state.full_from_bundle = False
 
 # On first load, show the precomputed default result instantly - do NOT compute.
 # Auto-running the analysis on every cold load is what pinned the deployed app on
@@ -584,6 +586,10 @@ if _first and st.session_state.full is None:
         st.session_state.full = b["full"]
         st.session_state.full_cfg = b["cfg"]
         st.session_state.full_key = _cfg_key(b["cfg"])
+        # The bundle also carries the joint-sensitivity sweep and the tidal-cycle
+        # simulation, so the Structure tab shows them without solving. This flag
+        # lets that tab reach for them instead of blanking to "awaiting a run".
+        st.session_state.full_from_bundle = True
 # The precomputed result loads in a blink, so hold the branded splash on screen
 # long enough to be seen and for its animation to play - a deliberate ~1.7 s
 # intro on the first visit only, not a recomputed wait. It is a rendered page
@@ -603,6 +609,7 @@ if st.session_state.full is not None and not isinstance(st.session_state.full, A
     st.session_state.full = None
     st.session_state.full_key = None
     st.session_state.full_cfg = None
+    st.session_state.full_from_bundle = False
     st.info("The analysis code changed since the last run. Press Run full analysis again.")
 
 # Which run the page is showing. Changing an input used to drop straight back to
@@ -897,17 +904,22 @@ with TABS[1]:
 
         section("Tidal cycle simulation",
                 "the frame solved at every phase of one M2 cycle - press play")
-        # Only solve the cycle when there is a full result for these exact inputs
-        # - the precomputed default, or a run the user asked for. Changing an
-        # input must not silently trigger 36 frame solves on a throttled container.
-        if st.session_state.get("full_key") != key:
+        # The simulation that goes with the result on screen. When that result is
+        # the precomputed default, the bundle already carries it, so it shows with
+        # no solving. When the user has run their own inputs, it is solved for
+        # those. Only a changed-but-not-yet-run configuration has nothing to show,
+        # and that must not silently trigger 36 frame solves on a throttled
+        # container - so it, and only it, asks for a run.
+        if st.session_state.get("full_from_bundle") and _bundle() is not None:
+            cyc = _bundle()["cycle"]
+        elif st.session_state.get("full_key") == key:
+            with st.spinner("Solving the frame through a tidal cycle..."):
+                cyc = _cycle(key)
+        else:
             unavailable_panel("Awaiting a run",
                               "Press Re-run with the new inputs to solve the tidal cycle "
                               "for the current configuration.")
             cyc = None
-        else:
-            with st.spinner("Solving the frame through a tidal cycle..."):
-                cyc = _cycle(key)
         if cyc is None:
             pass
         else:
@@ -1046,18 +1058,20 @@ with TABS[1]:
 
         section("How much do the modelling choices matter?",
                 "measured, not asserted - the spread is the honest precision")
-        # The 24-joint sweep is the heaviest thing on this tab. Compute it only
-        # for a configuration that already has a full result (the precomputed
-        # default, or a run the user requested), never as a side effect of a
-        # slider move on a throttled container.
-        if st.session_state.get("full_key") != key:
+        # The 24-joint sweep that goes with the displayed result: served from the
+        # bundle for the precomputed default, computed for a user's own run, and
+        # only asked-for when the configuration has changed but not yet been run -
+        # so a slider move never triggers 24 sweeps on a throttled container.
+        if st.session_state.get("full_from_bundle") and _bundle() is not None:
+            ljf_rows, joint_rows = _bundle()["sensitivity"]
+        elif st.session_state.get("full_key") == key:
+            with st.spinner("Sweeping joints and joint-flexibility models..."):
+                ljf_rows, joint_rows = _sensitivity(key)
+        else:
             unavailable_panel("Awaiting a run",
                               "Press Re-run with the new inputs to sweep the joints and "
                               "joint-flexibility models for the current configuration.")
             ljf_rows, joint_rows = [], []
-        else:
-            with st.spinner("Sweeping joints and joint-flexibility models..."):
-                ljf_rows, joint_rows = _sensitivity(key)
 
         if ljf_rows:
             cols = st.columns([3, 2])
