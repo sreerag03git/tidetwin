@@ -72,10 +72,68 @@ from tidetwin.ui import (
     unavailable_panel,
 )
 
+# Mobile view flag, read before the first render so the layout and sidebar state
+# can flip. The floating toggle and the responsive CSS are added right below.
+st.session_state.setdefault("mobile", False)
+MOBILE = bool(st.session_state["mobile"])
+
 st.set_page_config(
-    layout="wide", page_title="TideTwin", initial_sidebar_state="expanded", page_icon=None
+    layout="centered" if MOBILE else "wide",
+    page_title="TideTwin",
+    initial_sidebar_state="collapsed" if MOBILE else "expanded",
+    page_icon=None,
 )
 inject_theme()
+
+# Always-visible mobile/desktop toggle (a fixed floating pill so it is never lost)
+# plus responsive overrides. On a phone the console just fills the screen; on a
+# wide screen the media query wraps it in a centred phone-width device frame so a
+# desktop viewer sees the handset experience rather than a stretched single column.
+st.markdown(
+    """
+    <style>
+      .st-key-view_toggle { position:fixed !important; bottom:20px; right:20px;
+        width:auto !important; z-index:1000; margin:0 !important; }
+      .st-key-view_toggle button { border-radius:22px !important; padding:9px 18px !important;
+        background:#1a5fb4 !important; color:#ffffff !important; border:none !important;
+        font-weight:600 !important; box-shadow:0 6px 20px rgba(26,95,180,0.40) !important;
+        min-height:0 !important; }
+      .st-key-view_toggle button:hover { background:#154a8c !important; color:#ffffff !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+if MOBILE:
+    st.markdown(
+        """
+        <style>
+          .block-container { padding:0.8rem 0.7rem 3rem !important; max-width:100% !important; }
+          /* stack every st.columns row into one column */
+          [data-testid="stHorizontalBlock"] { flex-direction:column !important; gap:8px !important; }
+          [data-testid="stColumn"] { width:100% !important; flex:1 1 100% !important; min-width:0 !important; }
+          .stButton button { min-height:44px; }
+          section[data-testid="stSidebar"] { min-width:84vw !important; }
+          /* desktop viewers: render the mobile layout inside a phone chassis */
+          @media (min-width:720px) {
+            [data-testid="stMainBlockContainer"], .block-container {
+              max-width:440px !important; margin:26px auto 46px !important; padding:18px 17px 40px !important;
+              background:#f6f8fb !important; border:1px solid #cfd8e2 !important; border-radius:40px !important;
+              box-shadow:0 0 0 11px #e8edf3, 0 26px 62px rgba(20,40,70,0.22) !important; min-height:80vh !important;
+            }
+            [data-testid="stMainBlockContainer"]::before, .block-container::before {
+              content:""; display:block; width:46px; height:5px; border-radius:3px; background:#c4cfdd; margin:0 auto 14px !important;
+            }
+            section[data-testid="stSidebar"] { min-width:360px !important; width:360px !important; }
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+if st.button("🖥  Desktop view" if MOBILE else "📱  Mobile view", key="view_toggle",
+             help="Reflow the console for phones: single column, collapsed sidebar, "
+             "and a phone-width frame on desktop. Click again to return to the wide layout."):
+    st.session_state["mobile"] = not MOBILE
+    st.rerun()
 
 TABLES = load_tables()
 K_JOINTS = brace_chord_joints(TABLES)
