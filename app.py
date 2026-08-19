@@ -92,8 +92,8 @@ inject_theme()
 st.markdown(
     """
     <style>
-      .st-key-view_toggle { position:fixed !important; bottom:20px; right:20px;
-        width:auto !important; z-index:1000; margin:0 !important; }
+      .st-key-view_toggle { position:fixed !important; top:8px; left:50%; transform:translateX(-50%);
+        width:auto !important; z-index:1000000; margin:0 !important; }
       .st-key-view_toggle button { border-radius:22px !important; padding:9px 18px !important;
         background:#1a5fb4 !important; color:#ffffff !important; border:none !important;
         font-weight:600 !important; box-shadow:0 6px 20px rgba(26,95,180,0.40) !important;
