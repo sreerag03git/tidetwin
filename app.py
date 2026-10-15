@@ -60,7 +60,6 @@ from tidetwin.ui import (
     svg_figure,
     dataframe,
     figure_block,
-    claims_strip,
     inject_theme,
     panel,
     loading_screen,
@@ -836,25 +835,12 @@ masthead(
 c3 = by_id["C3"]
 CLAIMED_SIGNATURE = 11.1
 
-# The C3 verdict used to occupy a full-width banner here, above everything, on
-# every tab. It is still the load-bearing result and it is still stated plainly -
-# in the scoreboard below, first in the claims strip, and in full on Detection -
-# but it no longer crowds out the rest of the app before a reader has seen any of
-# it. That placement was the author's call and this is the author's revision.
-top = st.columns([1, 1, 1, 2])
-top[0].metric("Claims supported", sum(r.status is Status.PASS for r in results))
-top[1].metric("Claims refuted", sum(r.status is Status.FAIL for r in results))
-top[2].metric(
-    "Cannot be settled",
-    sum(r.status in (Status.UNTESTABLE_DATA, Status.UNTESTABLE_PHYSICAL) for r in results),
-    help="Not a failure, and not the same as 'not run'. The data or the physical test "
-    "needed to settle these does not exist here; the Provenance tab lists exactly what "
-    "would unlock each one.",
-)
-_pending = sum(r.status is Status.NOT_RUN for r in results)
-if _pending:
-    top[2].caption(f"{_pending} more awaiting analysis")
-with top[3]:
+# The headline claims scoreboard (supported / refuted / cannot be settled) was
+# removed on request. The run control stays, right-aligned where the scoreboard's
+# last column used to be; every claim's verdict is still stated in full on its own
+# tab, and the C3 headline on Detection.
+_, _rc = st.columns([3, 2])
+with _rc:
     run_control(st.container(), key, prominent=False, overlay=_run_overlay)
 
 # The same control at the top of the sidebar, next to the inputs it applies to.
@@ -930,12 +916,6 @@ with TABS[0]:
             ),
         )
 
-        section("Nine claims at a glance", "colour is the verdict; the figure is what we computed")
-        claims_strip([
-            (c.id, by_id[c.id].status.value.split(" - ")[0],
-             by_id[c.id].status.colour, by_id[c.id].computed_text)
-            for c in CLAIMS
-        ])
         provenance_legend()
 
         # This page used to be nothing but text: a claims strip, a legend and a
