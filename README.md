@@ -16,7 +16,7 @@ number that looks like a result.
 |---|---|---|---|
 | **C1** The intact excess strain ratio Phi = R - 1 at the bracketing-plus-reference clamp on th... | excess ratio Phi_0 = 0.200 | excess ratio Phi_0 = 0.200 (raw R_0 = 1.200) | **PASS** |
 | **C2** A local stiffness reduction d changes the excess ratio by d/(1-d), independent of geome... | +11.1 percent at d=0.10 (Eq 11) | excess ratio +11.1 % at a 10 % stiffness reduction (Eq 11, exact) | **PASS** |
-| **C3** Because the excess ratio is a ratio of two strains under the same load it cancels unifo... | first-order common-mode cancellation | non-uniform residual 8.70 % of the intact ratio (single pair) | **MARGINAL** |
+| **C3** Because the excess ratio is a ratio of two strains under the same load it cancels unifo... | first-order common-mode cancellation | non-uniform residual 8.02 % of the intact ratio (single pair) | **MARGINAL** |
 | **C4** Under spring tides a crack at 10 percent of the wall reaches SNR 3 within about 1.4 day... | ~1.4 days (spring), ~1.5 days (thermal) | SNR 3 in ~1.4 d (spring), ~1.5 d (thermal) | **PASS** |
 | **C5** The diurnal thermal signal (about 10 microstrain, tide-independent) maintains detection... | thermal band separable; coverage maintained | dual-signal coverage: thermal band separable | **MARGINAL** |
 | **C6** The log-transformed EnKF recovers remaining life to within 8 percent after a median of ... | <8% at median 13 months; +/-2.15 -> +/-0.36 yr | coverage 100 % | **MARGINAL** |
