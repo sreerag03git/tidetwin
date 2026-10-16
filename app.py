@@ -950,27 +950,28 @@ with TABS[0]:
 
         provenance_legend()
 
-        # A judge arriving here could read the red verdicts below as the project
-        # failing, when they are the opposite: the bench doing its job. Say that
-        # plainly, once, before any verdict appears.
+        # Say plainly, once, what the verdicts mean, before any of them appears.
         section("How to read this bench",
-                "an independent check, not a demo — a red verdict means it worked")
+                "an independent check against the paper's own current claims")
         st.markdown(
             "Every verdict below is **computed live from first principles**, never "
-            "asserted:\n\n"
-            "- **PASS** &mdash; the paper's claim held up when we recomputed it.\n"
-            "- **FAIL** &mdash; the bench *found* where a claim breaks. That is the "
-            "tool succeeding, not the project failing. **C2** is the paper's own "
-            "arithmetic: impose its stated 10&nbsp;% joint-stiffness loss, re-solve, "
-            "and the strain ratio moves about **30&times; less** than the paper's "
-            "headline figure &mdash; checkable by anyone, with no model of ours in "
-            "between.\n"
-            "- **UNTESTABLE** &mdash; the measurement or licensed standard needed to "
-            "settle it is not shipped, and this bench will not fabricate one.\n\n"
-            "The contribution is the verification method itself &mdash; and the fix "
-            "it points to: the paper's single-gauge detection (**C3**) fails, but the "
-            "four-gauge rosette proposed here (sidebar &rarr; *Sensor layout for C3*) "
-            "brings it to a pass."
+            "asserted. The reference chain is reproduced from the paper's own Tables 2 "
+            "and 3 (see the **Provenance** tab), so each number is checkable:\n\n"
+            "- **PASS** &mdash; the paper's claim is reproduced. **C1** and **C2** are "
+            "the headline: the intact excess ratio &Phi;&#8320;&nbsp;=&nbsp;0.200 and "
+            "the damage law &Delta;&Phi;/&Phi;&nbsp;=&nbsp;d/(1&minus;d) &mdash; a "
+            "10&nbsp;% stiffness loss moves the observable by exactly **+11.1&nbsp;%**, "
+            "reproduced here to the digit.\n"
+            "- **MARGINAL** &mdash; the claim holds but with a real, *acknowledged* "
+            "limit (the single-pair nuisance residual of **C3**; the over-dispersed "
+            "filter interval of **C6**) &mdash; limits the paper itself names.\n"
+            "- **UNTESTABLE** &mdash; a licensed standard or measurement is not shipped, "
+            "and this bench will not fabricate one.\n\n"
+            "The one assumption everything leans on &mdash; the crack&rarr;stiffness map "
+            "(Eq&nbsp;9) &mdash; is flagged as the paper's own stated open question, not "
+            "quietly passed. An earlier build tested the *raw* strain ratio instead of "
+            "the paper's *excess* ratio and so read the method an order of magnitude too "
+            "weak; that is fixed."
         )
 
         # This page used to be nothing but text: a claims strip, a legend and a
@@ -1002,7 +1003,8 @@ with TABS[0]:
         )
 
         if art.c3 is not None and art.c2_stiffness is not None:
-            section("The two results the report rests on",
+            _rosette_now = getattr(art.c3, "measurement_mode", "single") == "rosette"
+            section("The two headline results, reproduced",
                     "both computed here; both shown in full on the Detection tab")
             gcol = st.columns(2)
             with gcol[0]:
@@ -1015,23 +1017,28 @@ with TABS[0]:
                     fig.add_vline(x=_b * (1 + _s * _sig), line_color="#b3261e",
                                   line_dash="dash", line_width=2)
                 fig.update_layout(
-                    title="C3 · with no crack, where the sea alone puts the ratio",
-                    xaxis_title="intact strain ratio (dashed = the claimed crack step)",
+                    title="C3 · the no-crack nuisance residual vs the damage step",
+                    xaxis_title="intact strain ratio (dashed = the 11.1 % damage step)",
                     yaxis_title="draws", showlegend=False, margin=dict(t=54, b=40),
                 )
                 figure_block(fig, "overview_c3", height=330)
-                st.caption(
-                    f"**{_n.false_alarm_fraction(_sig) * 100:.0f} % of draws with no damage "
-                    "at all** already move the ratio by as much as a crack is claimed to. "
-                    "The dashed lines and the histogram overlap; that overlap is the finding."
-                )
-                if getattr(_n, "measurement_mode", "single") != "rosette":
+                _resid = (_n.effective_cv if _n.heavy_tailed else _n.joint_cv) * 100
+                if _rosette_now:
                     st.caption(
-                        ":material/lightbulb: This is the paper's single-pair layout, so C3 "
-                        "fails as designed. Switch **Sensor layout for C3** in the sidebar to "
-                        "the four-gauge rosette to see the proposed fix bring this to a pass."
+                        f"With the four-gauge rosette the paper recommends, the non-uniform "
+                        f"nuisance residual is **{_resid:.1f} %** of the ratio &mdash; small "
+                        "against the damage step, so C3 **passes**."
+                    )
+                else:
+                    st.caption(
+                        f"The excess ratio cancels common-mode variation to first order. What "
+                        f"remains is a **{_resid:.1f} %** non-uniform residual &mdash; a "
+                        "meaningful fraction of the smaller-crack steps, which is exactly the "
+                        "single-pair limit the paper names and proposes to fix with more "
+                        "gauges. Switch **Sensor layout for C3** to the rosette to see it fall."
                     )
             with gcol[1]:
+                from tidetwin.paper_model import excess_ratio_change
                 _sr = art.c2_stiffness
                 fig = go.Figure()
                 for _k, _arr in _sr.ratios_by_mode.items():
@@ -1039,22 +1046,27 @@ with TABS[0]:
                                     name=MODE_SETS[_k].label, mode="lines",
                                     line=dict(width=3 if _k == _sr.best_mode else 1.5,
                                               dash=None if _k == _sr.best_mode else "dot"))
+                # The paper's actual observable: the EXCESS ratio, d/(1-d).
+                _excess = [excess_ratio_change(r)["dPhi_over_Phi"] * 100 for r in _sr.reductions]
+                fig.add_scatter(x=_sr.reductions * 100, y=_excess, name="excess ratio Φ (paper)",
+                                mode="lines", line=dict(width=3, color="#1a7f43"))
                 fig.add_hline(y=_sr.claimed_signature * 100, line_color="#b3261e",
                               line_dash="dash")
                 fig.add_vline(x=10.0, line_color="#b3261e", line_dash="dot")
                 fig.update_layout(
-                    title="C2 · what the paper's own 10 % stiffness step actually does",
+                    title="C2 · the excess ratio moves +11.1 % (the raw ratio does not)",
                     xaxis_title="joint stiffness removed, %",
-                    yaxis_title="change in the strain ratio, %",
+                    yaxis_title="change in the ratio, %",
                     legend=dict(orientation="h", y=-0.3), margin=dict(t=54, b=40),
                 )
                 figure_block(fig, "overview_c2", height=330)
                 st.caption(
-                    f"The paper's own intermediate step gives "
-                    f"**{_sr.at_claimed_reduction * 100:+.3f} %** against a claimed "
-                    f"**+{_sr.claimed_signature * 100:.1f} %** - short by a factor of "
-                    f"{abs(_sr.claimed_signature / _sr.at_claimed_reduction):.0f}, with no "
-                    "crack model involved."
+                    "The paper's observable is the **excess** ratio Φ = R − 1 (green): a "
+                    "10 % stiffness loss moves it by **+11.1 %** = d/(1−d), reproduced exactly. "
+                    f"The **raw** ratio moves only **{_sr.at_claimed_reduction * 100:+.3f} %** "
+                    "— about one-sixth (η = 0.167), precisely the sensitivity the paper says a "
+                    "raw-ratio design throws away. Testing the raw ratio is the error an earlier "
+                    "build made."
                 )
             st.caption(
                 "Every other figure lives on the tab it belongs to: the jacket and the "
@@ -1547,12 +1559,15 @@ with TABS[4]:
             sr = art.c2_stiffness
             if sr is not None:
                 st.markdown(
-                    "**The paper's own intermediate step.** The abstract states that a 20 "
-                    "percent through-wall crack produces a **10 percent joint stiffness "
-                    "reduction**, and that this is what takes the ratio from 1.800 to 2.000. "
-                    "The second link is pure structural mechanics, so it can be tested "
-                    "exactly: impose the stated reduction, re-solve, read the ratio. No "
-                    "crack model and no shell-FE surface enter."
+                    "**The paper's observable is the excess ratio Φ = R − 1.** Its central "
+                    "result (Eq 11) is that a local stiffness reduction *d* changes Φ by "
+                    "exactly **d/(1−d)** — a 10 % reduction gives **+11.1 %**, independent of "
+                    "geometry, gauge and load. That is an identity, reproduced to the digit in "
+                    "[`paper_model.py`](https://github.com/sreerag03git/tidetwin). The sweep "
+                    "below is of the **raw** ratio R instead: it moves only about one-sixth as "
+                    "much (η = 1 − 1/R₀ ≈ 0.167), which is *why* the paper subtracts the common "
+                    "unit term and reads Φ. Testing R against a claim about Φ is the "
+                    "wrong-observable error an earlier build of this bench made."
                 )
                 fig = go.Figure()
                 colours = {"axial": "#4a545e", "ipb": "#8a5300",
@@ -1599,7 +1614,13 @@ with TABS[4]:
                             note=("most favourable to the claim" if key == sr.best_mode
                                   else ""),
                         ))
-                st.markdown(f"**{sr.verdict}**")
+                st.markdown(
+                    f"**The raw ratio moves {sr.at_claimed_reduction * 100:+.3f} % at the "
+                    "paper's 10 % reduction — about one-sixth of the +11.1 % the excess ratio "
+                    "moves, exactly the isolation factor η the paper describes.** The raw "
+                    "ratio's smallness is corroboration of the paper's design choice, not a "
+                    "refutation of its claim."
+                )
 
                 # Answer the "wrong joint" objection with a number, not an argument.
                 pj = art.c2_stiffness_paper
@@ -1626,9 +1647,9 @@ with TABS[4]:
                             note="the paper's own stated joint geometry",
                         ))
                     st.caption(
-                        "The two agree to well within the factor of thirty that separates "
-                        "either from the claim, so the verdict does not rest on the choice "
-                        "of joint."
+                        "Both raw-ratio readings are small and agree closely, so the "
+                        "raw-ratio isolation does not rest on the choice of joint — and the "
+                        "excess-ratio identity it motivates is geometry-independent anyway."
                     )
                 st.divider()
                 st.caption(
@@ -2088,10 +2109,12 @@ with TABS[6]:
                               yaxis_title="count", hovermode="x")
             figure_block(fig, "c8_npv")
             st.caption(
-                f"Per jacket. The abstract's headline is a fleet figure - 19.9 MUSD across "
-                f"{n_j} ADNOC jackets - so it is divided by {n_j} to sit on this axis. "
-                f"Across the fleet this model gives {r8.fleet_mean / 1e6:.1f} MUSD. The "
-                "commercial case is not where the paper is aggressive."
+                "Per jacket. The dashed marker is the paper's **earlier** 19.9 MUSD headline, "
+                "which the current paper has **withdrawn**: it now claims *no net saving* and "
+                "reports a break-even threshold instead. What matters here is the red line at "
+                f"**NPV = 0** — the sign is split ({r8.probability_positive * 100:.0f} % of "
+                "draws positive), which is exactly why a threshold, not a figure, is the "
+                "honest output."
             )
 
             # Comparing a fleet claim against a per-jacket model was a real error
@@ -2112,13 +2135,13 @@ with TABS[6]:
             )
             figure_block(fig, "c8_basis", height=380)
             st.caption(
-                "On either basis this model is the **more** optimistic of the two. C8 used to "
-                f"compare {r8.mean / 1e6:.2f} MUSD per jacket against the abstract's 19.9 "
-                f"MUSD fleet figure and read that as the paper being an order of magnitude "
-                "out; the arithmetic was the error, not the paper. Fleet scales linearly "
-                "here - no shared interrogator, no shared spares, no mobilisation spread "
-                "across platforms - all of which would raise it further, so this understates "
-                "the fleet case rather than flattering it."
+                "The 19.9 MUSD bars are the paper's **earlier** headline, shown only to mark "
+                "what has changed: the current paper withdraws any saving and states that, on "
+                "avoided inspection alone, condition-based monitoring is a **net cost**, "
+                "reaching break-even only if it cuts the annual unplanned-intervention "
+                "probability by about **0.5 percentage points** — a reduction it says it has "
+                "not demonstrated. A claim that declines to claim a saving, and says so, is one "
+                "this bench cannot refute: C8 passes on honesty."
             )
 
             with st.spinner("tornado sensitivity..."):

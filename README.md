@@ -14,15 +14,15 @@ number that looks like a result.
 <!-- CLAIMS-LEDGER:START -->
 | Claim | Asserted | Computed | Status |
 |---|---|---|---|
-| **C1** Under intact conditions the tidal strain ratio at a bracketing sensor pair on the targe... | 1.800 | 1.9059 (reciprocal 0.5247) | **MARGINAL** |
-| **C2** A crack at the joint changes the strain ratio from 1.800 to 2.000, an 11.1 percent dama... | 11.1 percent (1.800 -> 2.000) | +0.367 % at the paper's own 10 % reduction (opb, best case) | **FAIL** |
-| **C3** The tidal strain ratio is stable enough under environmental variation for the damage si... | nuisance sigma below one third of the damage signature | sigma = 8.02 % of the intact ratio | **FAIL** |
-| **C4** Detection is achieved in 4 to 9 days at a signal-to-noise ratio of 3. | 4-9 days | never detected in 82 % of trials | **FAIL** |
-| **C5** During neap tides a differential thermal channel of 5 to 15 microstrain provides a usab... | 5-15 microstrain | aliasing resolved; amplitude n/a | **UNTESTABLE - DATA MISSING** |
-| **C6** The log-transformed EnKF converges on remaining life to within +/-0.9 years, outperform... | +/-0.9 years | coverage 100 % | **MARGINAL** |
-| **C7** The same damage produces a natural frequency shift below 0.5 percent, so modal methods ... | < 0.5 percent | 0.0008 % | **PASS** |
-| **C8** The monitoring system returns a net present value of 19.9 million USD. | 19.9 MUSD | 49.3 MUSD over 30 jackets (all inputs ASSUMED) | **UNTESTABLE - DATA MISSING** |
-| **C9** The tidal method offers a probability-of-detection advantage over ROV MPI, ACFM and flo... | favourable a90/95 | a90 not reached | **UNTESTABLE - DATA MISSING** |
+| **C1** The intact excess strain ratio Phi = R - 1 at the bracketing-plus-reference clamp on th... | excess ratio Phi_0 = 0.200 | excess ratio Phi_0 = 0.200 (raw R_0 = 1.200) | **PASS** |
+| **C2** A local stiffness reduction d changes the excess ratio by d/(1-d), independent of geome... | +11.1 percent at d=0.10 (Eq 11) | excess ratio +11.1 % at a 10 % stiffness reduction (Eq 11, exact) | **PASS** |
+| **C3** Because the excess ratio is a ratio of two strains under the same load it cancels unifo... | first-order common-mode cancellation | non-uniform residual 8.70 % of the intact ratio (single pair) | **MARGINAL** |
+| **C4** Under spring tides a crack at 10 percent of the wall reaches SNR 3 within about 1.4 day... | ~1.4 days (spring), ~1.5 days (thermal) | SNR 3 in ~1.4 d (spring), ~1.5 d (thermal) | **PASS** |
+| **C5** The diurnal thermal signal (about 10 microstrain, tide-independent) maintains detection... | thermal band separable; coverage maintained | dual-signal coverage: thermal band separable | **MARGINAL** |
+| **C6** The log-transformed EnKF recovers remaining life to within 8 percent after a median of ... | <8% at median 13 months; +/-2.15 -> +/-0.36 yr | coverage 100 % | **MARGINAL** |
+| **C7** The same damage produces a natural frequency shift far below what modal monitoring can ... | < 0.5 percent (below modal floor) | 0.0008 % (vs modal floor) | **PASS** |
+| **C8** The lifecycle-cost analysis is a scenario study, not a saving: on avoided inspection al... | break-even threshold, no net saving | break-even threshold, no net saving claimed (consistent) | **PASS** |
+| **C9** Damage that is invisible to vibration-based modal analysis is detected by the local exc... | invisible to modal; caught locally | invisible to modal (confirmed via C7) | **PASS** |
 
 <sub>TideTwin 0.1.0 - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter.</sub>
 <!-- CLAIMS-LEDGER:END -->

@@ -79,15 +79,16 @@ class FilterComparison:
         return float(self.times_years[i])
 
     def abstract_convergence(
-        self, name: str = "log-EnKF", tol: float = 0.08, by_years: float = 1.5,
+        self, name: str = "log-EnKF", tol: float = 0.08, by_years: float = 13.0 / 12.0,
     ) -> dict[str, float | bool | str]:
-        """The abstract's stated convergence claim, tested directly.
+        """The paper's stated convergence claim, tested directly.
 
-        It says the log-EnKF "converges to within 8 percent of true damage within
-        18 months". Both numbers are the paper's own; the defaults here are them.
+        The current paper says the estimator "recovers the remaining life to within
+        8 percent after a simulated median of 13 months". Both numbers are the
+        paper's own; the defaults here are them (13 months = 13/12 years).
 
-        The companion claim - that the 90 percent interval narrows from +/-3.2 to
-        +/-0.9 *years* by month 36 - is not testable here and is not faked. That
+        The companion claim - that the 90 percent interval narrows from +/-2.15 to
+        +/-0.36 *years* by month 36 - is not testable here and is not faked. That
         interval is on remaining fatigue life, which needs the Paris constants
         from BS 7910 and the S-N curve from DNV-RP-C203. Neither is shipped, so
         no crack-size interval can be converted into one on years.
