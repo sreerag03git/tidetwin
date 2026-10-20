@@ -66,19 +66,8 @@ GOOD = "#1a7f43"  # the PASS green, reused by the running panel's completed stag
 _CSS = f"""
 <style>
 :root {{
-  --tt-bg:#e8ecf2; --tt-panel:#eef1f6; --tt-line:#d4dae3;
+  --tt-bg:#ffffff; --tt-panel:{PANEL}; --tt-line:{LINE};
   --tt-ink:{INK}; --tt-dim:{DIM}; --tt-accent:{ACCENT};
-  --tt-surface:#eef1f6;
-  /* Neumorphic (soft-UI) shadows: a light highlight top-left and a soft shadow
-     bottom-right, so a panel reads as gently extruded from the page. Text keeps
-     its near-black ink and the status palette keeps its AA contrast - only the
-     surfaces are soft, so nothing a judge needs to read loses legibility. */
-  --nm-light:rgba(255,255,255,.95);
-  --nm-dark:rgba(166,179,201,.55);
-  --nm-raised:6px 6px 14px var(--nm-dark), -6px -6px 14px var(--nm-light);
-  --nm-raised-sm:3px 3px 8px var(--nm-dark), -4px -4px 9px var(--nm-light);
-  --nm-inset:inset 3px 3px 7px var(--nm-dark), inset -3px -3px 7px var(--nm-light);
-  --nm-r:16px;
 }}
 
 .stApp, [data-testid="stAppViewContainer"] {{ background:var(--tt-bg); }}
@@ -307,109 +296,13 @@ a {{ color:var(--tt-accent); }}
   .tt-strip .c, .tt-hero, .stButton button {{ transition:none; }}
   .tt-strip .c:hover {{ transform:none; }}
 }}
-
-/* ======================================================================
-   Neumorphism (soft-UI) surface layer.
-   Only backgrounds, borders, radii and shadows change here - ink, the
-   provenance/status colours and the figures stay exactly as they were, so
-   legibility and the AA contrast the bench depends on are untouched.
-   ====================================================================== */
-
-/* Raised cards: extruded from the page on the soft base. */
-.tt-hero, .tt-verdict, .tt-unavail, .tt-strip .c,
-[data-testid="stMetric"],
-[data-testid="stExpander"],
-[data-testid="stPlotlyChart"],
-[data-testid="stDataFrame"] {{
-  background:var(--tt-surface) !important;
-  border:none !important;
-  border-radius:var(--nm-r) !important;
-  box-shadow:var(--nm-raised) !important;
-}}
-.tt-hero {{ border-top:4px solid !important; }}        /* keep the status accent */
-.tt-verdict {{ border-left:5px solid !important; }}
-.tt-strip .c {{ border-top:3px solid !important; }}
-[data-testid="stPlotlyChart"], [data-testid="stDataFrame"] {{
-  padding:.7rem .8rem !important; overflow:hidden;
-}}
-[data-testid="stExpander"] {{ overflow:hidden; }}
-[data-testid="stExpander"] summary {{ background:transparent; }}
-
-/* The cover's method chain becomes one inset tray rather than hairline cells. */
-.tt-chain {{
-  border:none; border-radius:var(--nm-r); box-shadow:var(--nm-inset);
-  padding:.4rem .6rem; background:var(--tt-surface);
-}}
-.tt-chain .step, .tt-chain .step:first-child {{ border-left:none; }}
-
-/* Credential pills and chips: small, softly raised. */
-.tt-cover .tt-creds span, .tt-chip, .tt-status {{
-  border-radius:9px; box-shadow:var(--nm-raised-sm);
-}}
-.tt-cover .tt-creds span {{ border-color:transparent; background:var(--tt-surface); }}
-
-/* Buttons: raised, and pressed-in on click. */
-.stButton button, .stDownloadButton button {{
-  background:var(--tt-surface); border:none !important; border-radius:12px;
-  box-shadow:var(--nm-raised-sm); color:var(--tt-ink);
-  transition:box-shadow .12s ease, transform .06s ease;
-}}
-.stButton button:hover, .stDownloadButton button:hover {{
-  box-shadow:var(--nm-raised); color:var(--tt-ink);
-}}
-.stButton button:active, .stDownloadButton button:active {{
-  box-shadow:var(--nm-inset); transform:translateY(1px);
-}}
-/* Primary (Run) keeps the brand accent, now as a soft-raised solid. */
-.stButton button[kind="primary"], .stButton button[data-testid="baseButton-primary"] {{
-  background:var(--tt-accent) !important; color:#fff !important;
-  box-shadow:var(--nm-raised-sm);
-}}
-.stButton button[kind="primary"]:active {{ box-shadow:var(--nm-inset); }}
-
-/* Inputs read as pressed-in wells. */
-[data-baseweb="input"], [data-baseweb="base-input"],
-[data-baseweb="select"] > div,
-.stNumberInput div[data-baseweb="input"],
-.stTextInput div[data-baseweb="input"],
-.stTextArea textarea {{
-  background:var(--tt-surface) !important; border:none !important;
-  border-radius:10px !important; box-shadow:var(--nm-inset) !important;
-}}
-.stSlider [data-baseweb="slider"] > div {{ background:transparent; }}
-.stSlider [data-baseweb="slider"] [role="slider"] {{ box-shadow:var(--nm-raised-sm); }}
-
-/* Sidebar as one soft surface with a gentle edge, not a hard rule. */
-[data-testid="stSidebar"] {{
-  background:var(--tt-bg) !important; border-right:none !important;
-  box-shadow:8px 0 20px rgba(166,179,201,.35);
-}}
-
-/* Tabs: an inset tray; the selected tab lifts out of it. */
-.stTabs [data-baseweb="tab-list"] {{
-  background:var(--tt-surface); border:none; border-radius:12px;
-  box-shadow:var(--nm-inset); padding:.25rem; gap:.2rem;
-}}
-.stTabs [data-baseweb="tab"] {{ border:none !important; margin:0; border-radius:9px; }}
-.stTabs [aria-selected="true"] {{
-  background:var(--tt-bg); box-shadow:var(--nm-raised-sm);
-  border:none !important; color:var(--tt-ink);
-}}
-
-/* Streamlit's alert/info/success boxes as soft trays. */
-[data-testid="stAlert"] {{
-  border:none !important; border-radius:var(--nm-r);
-  box-shadow:var(--nm-raised-sm);
-}}
 </style>
 """
 
 PLOTLY_TEMPLATE = go.layout.Template(
     layout=go.Layout(
-        # Paper blends into the neumorphic card it sits on; the plot area stays a
-        # clean light panel so the data itself reads crisply.
-        paper_bgcolor="#eef1f6",
-        plot_bgcolor="#f7f9fc",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
         font=dict(family=SANS, size=13, color=INK),
         title=dict(font=dict(family=SANS, size=15, color=INK)),
         # Colour-blind-safe ordering: blue, vermillion, amber, green, grey, purple.
