@@ -55,8 +55,12 @@ def main() -> int:
     elif station == "none":
         station = None
 
+    # record_days matches the app default (30 d, appdefaults.py). 14 d sits just
+    # below the 14.77 d M2-S2 Rayleigh limit - the one window where C5's M2 carrier
+    # aliases onto the solar/S2 thermal band - so the ledger must not report the
+    # method there. Only C5 moves with this (C3/C4/C6 cap record_days at 14 anyway).
     cfg = AnalysisConfig(
-        seed=args.seed, n_mc_samples=args.samples, n_theta=12, record_days=14.0,
+        seed=args.seed, n_mc_samples=args.samples, n_theta=12, record_days=30.0,
         tide_station=station,
     )
 
