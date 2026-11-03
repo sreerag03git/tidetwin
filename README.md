@@ -27,102 +27,52 @@ number that looks like a result.
 <sub>TideTwin 0.1.0 - seed 20260728 - OC4 geometry `d95a6af9a8c5` - LJF SHELL - tidal constants MEASURED: NOAA Mayport, FL (St John's entrance) - strongly rotary current, semidiurnal Atlantic. Current constants are from a bin at 3.69 m and are used as the depth-averaged current; the elevation gauge is 4.95 km from the current meter.</sub>
 <!-- CLAIMS-LEDGER:END -->
 
-**The headline finding is C3.** Under the eight nuisance channels the brief
-specifies — rotary tidal current direction, spring/neap range, wind-driven
-residual current, water level, twenty years of marine growth, wave-induced
-offset, scour-driven foundation softening and differential FBG drift — and under
-**real measured tidal forcing** at the shipped default station, the standard
-deviation of the intact strain ratio comes out at **8.2 % of the ratio**, against
-a claimed damage signature of 11.1 %. That is 0.74× the signal, against a
-one-third limit — so it misses by a factor of 2.2.
+On the shipped default configuration the board is **6 PASS, 3 MARGINAL, 0 FAIL,
+0 UNTESTABLE**. Every verdict is recomputed here from first principles and then
+attacked; nothing is quoted from the paper except the claims themselves.
 
-That default is the *most favourable* of the seven regimes tested. The others run
-to 39.6 %.
+**The headline is C1 and C2, reproduced to the digit.** The paper's observable is
+the *excess* strain ratio Φ = R − 1, not the raw ratio R. Its central result
+(Eq 11) is an identity: a local stiffness reduction *d* changes Φ by exactly
+*d*/(1−*d*), so a 10 % reduction moves the observable by **+11.1 %** and a 20 % one
+by +25.0 %, independent of joint geometry, clamp gauge length and load amplitude.
+`tidetwin/paper_model.py` rebuilds the paper's whole analytical chain from its own
+Tables 2 and 3 and reproduces every printed number — panel shear 19.3 kN, local
+deformation 0.170 µm, intact excess ratio **Φ₀ = 0.200**, the +11.1 % step — to the
+digit, so C1 and C2 are *checked*, not asserted. An earlier build of this bench
+tested the **raw** ratio instead, and so read the method an order of magnitude too
+weak: the raw ratio moves only η = 1 − 1/R₀ ≈ 0.167 as much — about one sixth —
+which is precisely the sensitivity the paper says a raw-ratio design throws away.
+That error is fixed, and it is the single most important correction in the bench.
 
-Four things make it a decision rather than a number:
+**C3 is the claim that keeps a caveat.** Because the excess ratio is a ratio of
+two strains under the same load, a uniform amplitude change or a common-mode
+sensor drift cancels to first order — that part holds by construction and needs no
+knowledge of the current. What remains is a **non-uniform residual of about 8 % of
+the intact ratio** under the eight nuisance channels the brief specifies — rotary
+tidal current direction, spring/neap range, wind-driven residual current, water
+level, marine growth, wave-induced offset, scour-driven foundation softening and
+differential FBG drift — with the single bracketing gauge pair the paper's worked
+example uses. That residual is a meaningful fraction of the smaller-crack
+signatures, so C3 lands at **MARGINAL** rather than PASS. It is not a refutation:
+it is the same single-pair limitation the paper itself names in Section 7 —
+differential drift aliasing onto crack growth, and a lone pair being blind to a
+crack elsewhere on the circumference — and proposes to fix with several gauges per
+joint. Switch *Sensor layout for C3* to the four-gauge rosette in the sidebar and
+the residual falls to around 1 %.
 
-- **It is converged.** σ moves by 2.5 % across the second half of the run, inside
-  the 5 % tolerance. An unconverged Monte Carlo has decided nothing, and the app
-  withholds the verdict when it detects one — this station needed 900 samples,
-  and at 250 the verdict was correctly withheld.
-- **It does not depend on our crack model.** The verdict is computed against the
-  paper's *own* claimed 11.1 % signature as well as against the one this app
-  computes, and fails both. The first comparison involves no modelling choice
-  made here.
-- **It is not an artefact of the assumed range widths.** Every nuisance range
-  would have to shrink to **0.45× its assumed width, simultaneously on all eight
-  channels**, for C3 to pass — a sea more than twice as quiet as assumed, on every
-  axis at once.
-- **The channels partially cancel, and it still fails.** The joint variance comes
-  out 33 % *below* the sum of the individual ones: the ratio normalisation
-  genuinely does reject a large part of what each channel does alone. That is a
-  point in the method's favour, and the margin is still not there.
+**The one assumption everything leans on is flagged, not passed.** The
+crack → stiffness map (Eq 9, *d* = (a/T)(c/Lw)) is the paper's *own* stated
+unvalidated assumption. It is likely optimistic for shallow cracks: if the true
+local reduction is nearer 2 % than 10 %, the excess-ratio step is ~2 %, not 11 %.
+C2 and C4 carry that contingency explicitly rather than quietly absorbing it,
+which is what keeps the bench an independent check rather than a second
+advertisement for the method.
 
-The storm-driven channels — wind current, wave offset and surge — are drawn
-correlated rather than independently, since they share a cause. Drawing them
-independently would have understated the joint σ and flattered the method.
-
-### C3 does not depend on the tide
-
-The obvious remaining objection was that the FAIL might be an artefact of the
-placeholder tide. It is not. `scripts/settle_c3.py` reruns the whole budget
-against **real published harmonic constants** from six NOAA CO-OPS stations —
-water-level amplitudes *and* tidal current ellipses — spanning semidiurnal to
-mixed-diurnal regimes, rectilinear to strongly rotary currents, and nearly an
-order of magnitude in current amplitude:
-
-| Tide | M2 current | Ellipse ecc. | Form factor | Dispersion, % of ratio | ÷ claimed | Break-even | Verdict |
-|---|---|---|---|---|---|---|---|
-| Placeholder *(not real)* | 0.250 | 0.320 | 0.571 | 13.7 | 1.23 | 0.32× | FAIL |
-| Mayport, FL | 0.584 | 0.299 | 0.184 | 8.0 | 0.72 | 0.47× | FAIL |
-| Woods Hole, MA † | 0.496 | 0.051 | 0.458 | 15.0 | 1.35 | 0.24× | FAIL |
-| Friday Harbor, WA | 0.381 | 0.178 | 1.733 | 17.4 | 1.57 | 0.22× | FAIL |
-| Boston, MA | 0.100 | 0.098 | 0.164 | 27.3 | 2.46 | 0.18× | FAIL |
-| Kings Bay, GA | 0.564 | 0.078 | 0.174 | 27.5 | 2.47 | 0.13× | FAIL |
-| Richmond, CA | 0.526 | 0.055 | 0.792 | 39.6 | 3.57 | never | FAIL |
-
-† variance undefined; robust scale used. Every other row is a standard deviation.
-
-Every real regime fails, by between 2.2× and 11× the limit. The placeholder was
-if anything *generous* — it sits in the lower half of the real range rather than
-stacking the deck. Reproduce with
-`python scripts/settle_c3.py --samples 700`.
-
-**The mechanism, which is the useful part.** Nuisance dispersion tracks the
-*shape* of the tidal ellipse (r = **−0.70** against eccentricity) and is
-essentially independent of its *size* (r = −0.17 against current amplitude). A
-rotary current never goes slack, so the strain ratio stays well conditioned; a
-reversing current passes through zero twice a cycle and the ratio degrades near
-slack water. The method is not signal-starved — it is ill-conditioned.
-
-**At a reversing-current site the statistic has no variance at all.** The ratio's
-denominator is the upper gauge's M2 amplitude, which approaches zero at slack
-water, and a ratio with a near-zero denominator is Cauchy-like. The sample
-standard deviation then *grows* with sample count instead of converging — it went
-38.7% → 53.4% between 700 and 2800 samples at Woods Hole and was still climbing.
-
-The app detects this from the fact that a **robust scale converges while σ does
-not**: a robust scale converges for any distribution with a density, the standard
-deviation only if the variance exists. Where the variance does not exist, C3 is
-decided on 0.7413 × IQR rather than withheld, because more samples cannot fix a
-statistic that has no variance. Woods Hole still fails, at 15.0% against the
-claimed 11.1%.
-
-So eccentricity predicts two things, and the second matters more than the first:
-the *level* of the nuisance floor, and whether the statistic is well posed at all.
-The two most reversing sites are where σ/robust is largest (2.8 at Woods Hole
-against 1.0–1.3 elsewhere), which is where the variance breaks down.
-
-That a detection statistic has no second moment at an ordinary offshore site is a
-finding against the method in its own right: a detection threshold cannot be set
-from a quantity that has no variance.
-
-Actionable version: if this method is deployed anywhere, it wants a strongly
-rotary tidal current. And at the most rotary site tested it still misses by 2.2×.
-
-The platform site itself still needs a TPXO or FES extraction — both are
-registered downloads and are not shipped. But the evidence says that extraction
-would change the numbers, not the conclusion.
+The platform site itself still wants a TPXO or FES extraction — both are
+registered downloads and are not shipped — but the excess-ratio identity is
+geometry- and amplitude-independent, so that extraction changes the input
+magnitudes, not the verdicts.
 
 ## What is real, and what is not
 
@@ -139,10 +89,11 @@ would change the numbers, not the conclusion.
 | S-N curve, Paris constants | DNV-RP-C203 Table 2-2, BS 7910 Table 8 | **not shipped** — paid standards |
 | Published NDT POD curves | ROV MPI, ACFM, flooded member detection | **not shipped** — needs digitising from source figures |
 
-Nothing in the "not shipped" rows is faked. Each one is a gate: the dependent
-claim reports `UNTESTABLE — DATA MISSING` with the exact document to transcribe
-from and the file to put it in. Several claims land there, and that is the
-correct answer rather than a shortfall.
+Nothing in the "not shipped" rows is faked. Each one is a gate: a claim that
+needs one reports `UNTESTABLE — DATA MISSING` with the exact document to
+transcribe from and the file to put it in. On the shipped default none of the
+nine land there, but the gates are what keep the bench from ever fabricating a
+number it cannot source.
 
 ## Provenance classes
 
@@ -174,12 +125,6 @@ Refresh the real tidal constants (NOAA, no account required):
 
 ```bash
 PYTHONPATH=. python scripts/fetch_tides.py
-```
-
-Re-run the C3 settlement across every real tidal regime:
-
-```bash
-PYTHONPATH=. python scripts/settle_c3.py --samples 300
 ```
 
 Tests (solver verification, not UI):
