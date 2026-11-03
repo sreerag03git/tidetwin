@@ -23,3 +23,8 @@ gatherUsageStats = false
 # because a slider moved.
 magicEnabled = false
 fastReruns = true
+
+[client]
+# Judge-facing demo: hide Streamlit's developer chrome (the Deploy button and
+# the dev menu) so the view is app-only. Set to "auto" to restore the toolbar.
+toolbarMode = "minimal"
